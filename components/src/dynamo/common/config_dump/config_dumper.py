@@ -138,23 +138,24 @@ def get_config_dump(config: Any, extra_info: Optional[Dict[str, Any]] = None) ->
 
         # Add common versions
         if ver := _get_sglang_version():
-            config_dump["sglang_version"] = ver
+            debug_info["sglang_version"] = ver
         if ver := _get_trtllm_version():
-            config_dump["trtllm_version"] = ver
+            debug_info["trtllm_version"] = ver
         if ver := _get_vllm_version():
-            config_dump["vllm_version"] = ver
+            debug_info["vllm_version"] = ver
 
         # Add any extra information provided by the caller
         if extra_info:
-            config_dump.update(extra_info)
+            debug_info.update(extra_info)
 
-        return canonical_json_encoder.encode(config_dump)
+        logger.info("Debug info collected successfully")
+        return canonical_json_encoder.encode(debug_info)
 
     except Exception as e:
-        logger.error(f"Error collecting config dump: {e}")
+        logger.error(f"Error collecting debug info: {e}")
         # Return a basic error response with at least system info
         error_info = {
-            "error": f"Failed to collect config dump: {str(e)}",
+            "error": f"Failed to collect debug info: {str(e)}",
             "system_info": get_system_info(),  # Always try to include basic system info
         }
         return canonical_json_encoder.encode(error_info)
@@ -171,7 +172,7 @@ def add_config_dump_args(parser: argparse.ArgumentParser):
         "--dump-config-to",
         type=str,
         default=None,
-        help="Dump config to the specified file path. If not specified, the config will be dumped to stdout at INFO level.",
+        help="Dump debug config to the specified file path. If not specified, the config will be dumped to stdout at INFO level.",
     )
 
 
@@ -200,7 +201,7 @@ def register_encoder(type_class):
         def encode_my_class(obj: MyClass):
             return {"field": obj.field}
     """
-    logger.debug(f"Registering encoder for {type_class}")
+    logger.info(f"Registering encoder for {type_class}")
     return _preprocess_for_encode.register(type_class)
 
 

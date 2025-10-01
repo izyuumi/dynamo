@@ -6,7 +6,6 @@ import subprocess
 
 from hatchling.builders.hooks.plugin.interface import BuildHookInterface
 
-
 def get_components():
     """
     Scan the components/src/dynamo directory to get the list of available components.
