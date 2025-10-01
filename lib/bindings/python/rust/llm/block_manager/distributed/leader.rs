@@ -6,8 +6,7 @@ use utils::get_barrier_id_prefix;
 
 use derive_getters::Dissolve;
 use llm_rs::block_manager::distributed::{
-    KvbmLeader as KvbmLeaderImpl, KvbmLeaderConfig, KvbmLeaderNumBlocksConfig,
-    OffloadMode,
+    KvbmLeader as KvbmLeaderImpl, KvbmLeaderConfig, KvbmLeaderNumBlocksConfig, OffloadMode,
 };
 
 const CPU_CACHE: &str = "DYN_KVBM_CPU_CACHE_GB";
@@ -23,7 +22,7 @@ const OFFLOAD_MODE: &str = "DYN_KVBM_OFFLOAD_MODE";
 const DEFAULT_OFFLOAD_MODE: OffloadMode = OffloadMode::Eager;
 
 fn read_env_str(key: &str) -> Option<String> {
-    std::env::var(key).ok()?.trim.parse::<String>().ok()
+    std::env::var(key).ok()?.trim().parse::<String>().ok()
 }
 
 fn read_env_usize(key: &str) -> Option<usize> {
@@ -39,7 +38,7 @@ fn read_cache_size_float(key: &str) -> f64 {
 
 fn get_offload_mode_config(key: &str) -> OffloadMode {
     if let Some(offload_mode) = read_env_str(key) {
-        match offload_mode.to_lowercase().to_str() {
+        return match offload_mode.to_lowercase().as_str() {
             "eager" => OffloadMode::Eager,
             "delayed" => OffloadMode::Delayed,
             _ => panic!(
@@ -50,8 +49,8 @@ fn get_offload_mode_config(key: &str) -> OffloadMode {
                 • DYN_KVBM_OFFLOAD_MODE=eager   (default value if DYN_KVBM_OFFLOAD_MODE is not set)\n\
                 • DYN_KVBM_OFFLOAD_MODE=delayed"
             )
-        }
-    }
+        };
+    };
 
     OffloadMode::Eager   // default behavior if not set.
 }

@@ -8,7 +8,7 @@ mod zmq;
 mod leader;
 mod worker;
 
-pub use leader::{KvbmLeader, KvbmLeaderConfig, KvbmLeaderNumBlocksConfig};
+pub use leader::{KvbmLeader, KvbmLeaderConfig, KvbmLeaderNumBlocksConfig, OffloadMode};
 pub use transfer::BlockTransferHandler;
 pub use utils::{
     BlockTransferPool, BlockTransferRequest, ConnectorRequestLeader, ConnectorTransferType,
