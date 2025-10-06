@@ -1,40 +1,73 @@
-# LLM Router with NVIDIA Dynamo Cloud Platform
-## Kubernetes Deployment Guide
+# LLM Router with NVIDIA Dynamo
 
-<div align="center">
+Intelligent LLM request routing with distributed inference serving on Kubernetes.
 
-[![NVIDIA](https://img.shields.io/badge/NVIDIA-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://nvidia.com)
-[![Kubernetes](https://img.shields.io/badge/kubernetes-%23326ce5.svg?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)
-[![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![Helm](https://img.shields.io/badge/Helm-0F1689?style=for-the-badge&logo=Helm&labelColor=0F1689)](https://helm.sh)
+## Overview
 
-**Intelligent LLM Request Routing with Distributed Inference Serving**
+This integration combines [**NVIDIA LLM Router**](https://github.com/NVIDIA-AI-Blueprints/llm-router) with [**NVIDIA Dynamo**](https://github.com/ai-dynamo/dynamo) to create an intelligent, scalable LLM serving platform:
 
-</div>
+**NVIDIA Dynamo** provides distributed inference serving with disaggregated architecture and multi-model support.
 
----
+**NVIDIA LLM Router** intelligently routes requests based on task type (12 categories) and complexity (7 categories) using Rust-based routing models.
 
-This comprehensive guide provides step-by-step instructions for deploying the [**NVIDIA LLM Router**](https://github.com/NVIDIA-AI-Blueprints/llm-router) with the official [**NVIDIA Dynamo Cloud Platform**](https://docs.nvidia.com/dynamo/latest/guides/dynamo_deploy/dynamo_cloud.html) on Kubernetes.
+**Result**: Optimal model selection for each request, reducing latency by 40-60% and costs by 30-50% compared to using a single large model.
 
-## NVIDIA LLM Router and Dynamo Integration
+## Table of Contents
 
-### Overview
+- [Quickstart](#quickstart)
+- [Architecture](#architecture)
+- [Prerequisites](#prerequisites)
+- [Deployment Guide](#deployment-guide)
+  - [Step 1: Install Dynamo Platform](#step-1-install-dynamo-platform)
+  - [Step 2: Deploy Multiple vLLM Models](#step-2-deploy-multiple-vllm-models)
+  - [Step 3: Verify Shared Frontend Deployment](#step-3-verify-shared-frontend-deployment)
+  - [Step 4: Test Shared Frontend Service](#step-4-test-shared-frontend-service)
+  - [Step 5: Set Up LLM Router API Keys](#step-5-set-up-llm-router-api-keys)
+  - [Step 6: Deploy LLM Router](#step-6-deploy-llm-router)
+  - [Step 7: Configure External Access](#step-7-configure-external-access)
+- [Testing the Integration](#testing-the-integration)
+- [Configuration Reference](#configuration-reference)
+- [Troubleshooting](#troubleshooting)
+- [Cleanup](#cleanup)
 
-This integration combines two powerful NVIDIA technologies to create an intelligent, scalable LLM serving platform:
+## Quickstart
 
-### NVIDIA Dynamo
-- **Distributed inference serving framework**
-- **Disaggregated serving capabilities**
-- **Multi-model deployment support**
-- **Kubernetes-native scaling**
+Get the LLM Router + Dynamo integration running in under 30 minutes:
 
-### NVIDIA LLM Router
-- **Intelligent request routing**
-- **Task classification (12 categories)**
-- **Complexity analysis (7 categories)**
-- **Rust-based performance**
+```bash
+# 1. Set environment variables
+export NAMESPACE=dynamo-kubernetes
+export DYNAMO_VERSION=0.5.0
+export HF_TOKEN=your_hf_token
 
-> **Result**: A complete solution for deploying multiple LLMs with automatic routing based on request characteristics, maximizing both **performance** and **cost efficiency**.
+# 2. Install Dynamo Platform
+# Follow: https://github.com/ai-dynamo/dynamo/blob/main/docs/guides/dynamo_deploy/installation_guide.md#path-a-production-install
+
+# 3. Deploy a model (Llama-8B for quick testing)
+export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
+export MODEL_SUFFIX=llama-8b
+export DYNAMO_IMAGE=nvcr.io/nvidia/ai-dynamo/vllm-runtime:${DYNAMO_VERSION}
+
+kubectl create secret generic hf-token-secret \
+  --from-literal=HF_TOKEN=${HF_TOKEN} -n ${NAMESPACE}
+
+cd "examples/deployments/LLM Router/"
+envsubst < frontend.yaml | kubectl apply -f - -n ${NAMESPACE}
+envsubst < agg.yaml | kubectl apply -f - -n ${NAMESPACE}
+
+# 4. Deploy LLM Router
+# Clone the router repo and follow Step 6 in the Deployment Guide below
+
+# 5. Test the integration
+kubectl port-forward svc/llm-router-router-controller 8084:8084 -n llm-router
+curl -X POST http://localhost:8084/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"messages": [{"role": "user", "content": "Hello!"}], "model": "", "nim-llm-router": {"policy": "task_router", "routing_strategy": "triton", "model": ""}}'
+```
+
+For production deployments with multiple models, continue to the [Deployment Guide](#deployment-guide).
+
+## Architecture
 
 ### Kubernetes Architecture Overview
 
@@ -148,56 +181,17 @@ graph TB
 
 ### Routing Strategies
 
-<div align="center">
+The router supports two routing strategies:
 
-#### Task-Based Routing
-*Routes requests based on the type of task being performed*
+- **Task-Based Routing**: Routes based on task type (code generation, chatbot, summarization, etc.)
+- **Complexity-Based Routing**: Routes based on complexity level (creativity, reasoning, domain knowledge, etc.)
 
-</div>
+Example routing logic:
+- Simple tasks (classification, summarization) → Llama-3.1-8B (fast, efficient)  
+- Complex tasks (reasoning, creativity) → Llama-3.1-70B (powerful, detailed)
+- Conversational/creative tasks → Mixtral-8x22B (diverse responses)
 
-<details>
-<summary><b>View Task Routing Table</b></summary>
-
-| **Task Type** | **Target Model** | **Use Case** |
-|:---|:---|:---|
-| Code Generation | `llama-3.1-70b-instruct` | Programming tasks |
-| Brainstorming | `llama-3.1-70b-instruct` | Creative ideation |
-| Chatbot | `mixtral-8x22b-instruct-v0.1` | Conversational AI |
-| Summarization | `llama-3.1-8b-instruct` | Text summarization |
-| Open QA | `llama-3.1-70b-instruct` | Complex questions |
-| Closed QA | `llama-3.1-8b-instruct` | Simple Q&A |
-| Classification | `llama-3.1-8b-instruct` | Text classification |
-| Extraction | `llama-3.1-8b-instruct` | Information extraction |
-| Rewrite | `llama-3.1-8b-instruct` | Text rewriting |
-| Text Generation | `mixtral-8x22b-instruct-v0.1` | General text generation |
-| Other | `mixtral-8x22b-instruct-v0.1` | Miscellaneous tasks |
-| Unknown | `llama-3.1-8b-instruct` | Unclassified tasks |
-
-</details>
-
----
-
-<div align="center">
-
-#### Complexity-Based Routing
-*Routes requests based on the complexity of the task*
-
-</div>
-
-<details>
-<summary><b>View Complexity Routing Table</b></summary>
-
-| **Complexity Level** | **Target Model** | **Use Case** |
-|:---|:---|:---|
-| Creativity | `llama-3.1-70b-instruct` | Creative tasks |
-| Reasoning | `llama-3.1-70b-instruct` | Complex reasoning |
-| Contextual-Knowledge | `llama-3.1-8b-instruct` | Context-dependent tasks |
-| Few-Shot | `llama-3.1-70b-instruct` | Tasks with examples |
-| Domain-Knowledge | `mixtral-8x22b-instruct-v0.1` | Specialized knowledge |
-| No-Label-Reason | `llama-3.1-8b-instruct` | Unclassified complexity |
-| Constraint | `llama-3.1-8b-instruct` | Tasks with constraints |
-
-</details>
+For complete routing tables and configuration details, see [Configuration Reference](#configuration-reference).
 
 ### Performance Benefits
 
@@ -212,51 +206,25 @@ graph TB
 
 </div>
 
-### API Usage Examples
+### API Usage
 
-<div align="center">
-
-#### Task-Based Routing
-
-</div>
+The LLM Router provides an OpenAI-compatible API. Specify routing policy in the request:
 
 ```bash
-# Code generation task → Routes to meta-llama/Llama-3.1-70B-Instruct
 curl -X POST http://llm-router.local/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "",
-    "messages": [{"role": "user", "content": "Write a Python function to sort a list"}],
-    "max_tokens": 512,
+    "messages": [{"role": "user", "content": "Your prompt here"}],
     "nim-llm-router": {
-      "policy": "task_router",
+      "policy": "task_router",  # or "complexity_router"
       "routing_strategy": "triton",
       "model": ""
     }
   }'
 ```
 
-<div align="center">
-
-#### Complexity-Based Routing
-
-</div>
-
-```bash
-# Complex reasoning task → Routes to meta-llama/Llama-3.1-70B-Instruct
-curl -X POST http://llm-router.local/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "",
-    "messages": [{"role": "user", "content": "Explain quantum entanglement"}],
-    "max_tokens": 512,
-    "nim-llm-router": {
-      "policy": "complexity_router",
-      "routing_strategy": "triton",
-      "model": ""
-    }
-  }'
-```
+For complete API examples and testing procedures, see [Testing the Integration](#testing-the-integration).
 
 ### How Dynamo Model Routing Works
 
@@ -360,10 +328,10 @@ Set the required environment variables for deployment:
 | Variable | Description | Example | Required | Used In |
 |----------|-------------|---------|----------|---------|
 | `NAMESPACE` | Kubernetes namespace for deployment | `dynamo-kubernetes` | Yes | All deployments |
-| `DYNAMO_VERSION` | Dynamo vLLM runtime version | `0.4.1` | Yes | Platform install |
+| `DYNAMO_VERSION` | Dynamo vLLM runtime version | `0.5.0` | Yes | Platform install |
 | `MODEL_NAME` | Hugging Face model to deploy | `meta-llama/Llama-3.1-8B-Instruct` | Yes | Model deployment |
 | `MODEL_SUFFIX` | Kubernetes deployment name suffix | `llama-8b` | Yes | Model deployment |
-| `DYNAMO_IMAGE` | Full Dynamo runtime image path | `nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.4.1` | Yes | Model deployment |
+| `DYNAMO_IMAGE` | Full Dynamo runtime image path | `nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0` | Yes | Model deployment |
 | `HF_TOKEN` | Hugging Face access token | `your_hf_token` | Yes | Model access |
 | `NGC_API_KEY` | NVIDIA NGC API key | `your-ngc-api-key` | No | Private images |
 | `DYNAMO_API_BASE` | Dynamo service endpoint URL | `http://vllm-frontend-frontend.dynamo-kubernetes.svc.cluster.local:8000` | Yes | LLM Router |
@@ -392,14 +360,14 @@ For optimal deployment experience, consider model size vs. resources:
 
 **NGC Setup Instructions**:
 1. **Choose Dynamo Version**: Visit [NGC Dynamo vLLM Runtime Tags](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/ai-dynamo/containers/vllm-runtime/tags) to see available versions
-2. **Set Version**: Export your chosen version: `export DYNAMO_VERSION=0.4.1` (or latest available)
+2. **Set Version**: Export your chosen version: `export DYNAMO_VERSION=0.5.0` (or latest available)
 3. **Optional - NGC API Key**: Visit [https://ngc.nvidia.com/setup/api-key](https://ngc.nvidia.com/setup/api-key) if you need private image access
 4. **Prebuilt Images**: NGC provides prebuilt CUDA and ML framework images, eliminating the need for local builds
 
 **Available NGC Dynamo Images**:
-- **vLLM Runtime**: `nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.4.1` (recommended)
-- **SGLang Runtime**: `nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.4.1`
-- **TensorRT-LLM Runtime**: `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.4.1`
+- **vLLM Runtime**: `nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0` (recommended)
+- **SGLang Runtime**: `nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.0`
+- **TensorRT-LLM Runtime**: `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.0`
 - **Dynamo Kubernetes Operator**: `nvcr.io/nvidia/ai-dynamo/dynamo-operator:latest`
 - **Dynamo Deployment API**: `nvcr.io/nvidia/ai-dynamo/dynamo-api-store:latest`
 
@@ -428,43 +396,16 @@ For optimal deployment experience, consider model size vs. resources:
 
 ## Prerequisites
 
-<div align="center">
+Before deploying the LLM Router integration, ensure you have:
 
-[![Prerequisites](https://img.shields.io/badge/Prerequisites-Check%20List-blue?style=for-the-badge&logo=checkmk)](https://github.com/ai-dynamo/dynamo/blob/main/docs/guides/dynamo_deploy/dynamo_cloud.md#prerequisites)
+1. **Dynamo Platform Prerequisites** - Follow the [Dynamo Installation Guide](../../../docs/guides/dynamo_deploy/installation_guide.md#prerequisites) for:
+   - Required tools (kubectl v1.24+, Helm v3.0+, Docker)
+   - Kubernetes cluster with NVIDIA GPU nodes
+   - Container registry access
 
-*Ensure your environment meets all requirements before deployment*
-
-</div>
-
-### Required Tools
-
-<div align="center">
-
-**Verify you have the required tools installed:**
-
-</div>
-
-```bash
-# Required tools verification
-kubectl version --client
-helm version
-docker version
-```
-
-<div align="center">
-
-| **Tool** | **Requirement** | **Status** |
-|:---:|:---:|:---:|
-| **kubectl** | `v1.24+` | Check with `kubectl version --client` |
-| **Helm** | `v3.0+` | Check with `helm version` |
-| **Docker** | Running daemon | Check with `docker version` |
-
-</div>
-
-**Additional Requirements:**
-- **NVIDIA GPU nodes** with GPU Operator installed (for LLM inference)
-- **Container registry access** (Docker Hub, NVIDIA NGC, etc.)
-- **Git** for cloning repositories
+2. **LLM Router Specific Requirements:**
+   - **Git** for cloning the LLM Router repository
+   - **NGC API Key** (optional, for private container registries)
 
 ### Inference Runtime Images
 
@@ -472,13 +413,13 @@ Set your inference runtime image from the available NGC options:
 
 ```bash
 # Set your inference runtime image
-export DYNAMO_IMAGE=nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.4.1
+export DYNAMO_IMAGE=nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0
 ```
 
 **Available Runtime Images**:
-- `nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.4.1` - vLLM backend (recommended)
-- `nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.4.1` - SGLang backend
-- `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.4.1` - TensorRT-LLM backend
+- `nvcr.io/nvidia/ai-dynamo/vllm-runtime:0.5.0` - vLLM backend (recommended)
+- `nvcr.io/nvidia/ai-dynamo/sglang-runtime:0.5.0` - SGLang backend
+- `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.0` - TensorRT-LLM backend
 
 ### Hugging Face Token
 
@@ -524,13 +465,7 @@ If Istio is not installed, follow the [official Istio installation guide](https:
 
 ## Pre-Deployment Validation
 
-<div align="center">
-
-[![Validation](https://img.shields.io/badge/Pre--Deployment-Validation-yellow?style=for-the-badge&logo=checkmarx)](https://kubernetes.io)
-
-*Validate your environment before starting deployment*
-
-</div>
+Validate your environment before starting deployment.
 
 Before starting the deployment, validate that your environment meets all requirements:
 
@@ -581,7 +516,7 @@ python -c "import yaml; yaml.safe_load(open('llm-router-values-override.yaml'))"
 ```bash
 # Core deployment variables
 export NAMESPACE=dynamo-kubernetes
-export DYNAMO_VERSION=0.4.1  # Choose your Dynamo version from NGC catalog
+export DYNAMO_VERSION=0.5.0  # Choose your Dynamo version from NGC catalog
 export DYNAMO_IMAGE=nvcr.io/nvidia/ai-dynamo/vllm-runtime:${DYNAMO_VERSION}
 
 # Model deployment variables (deploy all three models)
@@ -619,15 +554,7 @@ echo "DYNAMO_API_KEY: ${DYNAMO_API_KEY:-'NOT SET (can be empty for local deploym
 
 ## Deployment Guide
 
-<div align="center">
-
-[![Deployment](https://img.shields.io/badge/Deployment-Step%20by%20Step-green?style=for-the-badge&logo=kubernetes)](https://kubernetes.io)
-
-**Complete walkthrough for deploying NVIDIA Dynamo and LLM Router**
-
-</div>
-
----
+Complete walkthrough for deploying NVIDIA Dynamo and LLM Router.
 
 
 ### Deployment Overview
@@ -652,46 +579,19 @@ graph LR
 
 </div>
 
-### Step 1: Install Dynamo Platform (Path A: Production Install)
+### Step 1: Install Dynamo Platform
 
-<div align="center">
+If you haven't already installed the Dynamo platform, follow the **[Dynamo Installation Guide - Path A: Production Install](../../../docs/guides/dynamo_deploy/installation_guide.md#path-a-production-install)** to:
 
-[![Step 1](https://img.shields.io/badge/Step%201-Install%20Platform-blue?style=for-the-badge&logo=kubernetes)](https://github.com/ai-dynamo/dynamo/blob/main/docs/guides/dynamo_deploy/dynamo_cloud.md#path-a-production-install)
+1. Install Dynamo CRDs
+2. Install Dynamo Platform
+3. Verify the installation
 
-*Deploy the Dynamo Cloud Platform using the official **Path A: Production Install***
-
-</div>
-
-
-
-```bash
-# 1. Install CRDs (use 'upgrade' instead of 'install' if already installed)
-helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-crds-${DYNAMO_VERSION}.tgz
-helm install dynamo-crds dynamo-crds-${DYNAMO_VERSION}.tgz --namespace default
-
-# 2. Install Platform (use 'upgrade' instead of 'install' if already installed)
-kubectl create namespace ${NAMESPACE}
-helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-platform-${DYNAMO_VERSION}.tgz
-helm install dynamo-platform dynamo-platform-${DYNAMO_VERSION}.tgz --namespace ${NAMESPACE}
-
-# 3. Verify deployment
-# Check CRDs
-kubectl get crd | grep dynamo
-# Check operator and platform pods
-kubectl get pods -n ${NAMESPACE}
-# Expected: dynamo-operator-* and etcd-* pods Running
-kubectl get svc -n ${NAMESPACE}
-```
+> **Note**: For a quick reference, see the [Deployment Quickstart](../../../docs/guides/dynamo_deploy/README.md#1-install-platform-first).
 
 ### Step 2: Deploy Multiple vLLM Models
 
-<div align="center">
-
-[![Step 2](https://img.shields.io/badge/Step%202-Deploy%20Multiple%20Models-orange?style=for-the-badge&logo=nvidia)](https://github.com/ai-dynamo/dynamo/blob/main/components/backends/vllm/deploy/README.md)
-
-*Deploy multiple vLLM models for intelligent routing*
-
-</div>
+Deploy multiple vLLM models for intelligent routing.
 
 
 
@@ -770,13 +670,7 @@ envsubst < disagg.yaml | kubectl apply -f - -n ${NAMESPACE}
 
 ### Step 3: Verify Shared Frontend Deployment
 
-<div align="center">
-
-[![Step 3](https://img.shields.io/badge/Step%203-Verify%20Deployments-green?style=for-the-badge&logo=kubernetes)](https://kubernetes.io)
-
-*Verify that the shared frontend and model workers have been deployed successfully*
-
-</div>
+Verify that the shared frontend and model workers have been deployed successfully.
 
 ```bash
 # Check deployment status for shared frontend and all model workers
@@ -795,13 +689,7 @@ kubectl get svc -n ${NAMESPACE} | grep frontend
 
 ### Step 4: Test Shared Frontend Service
 
-<div align="center">
-
-[![Step 4](https://img.shields.io/badge/Step%204-Test%20Services-purple?style=for-the-badge&logo=checkmarx)](https://checkmarx.com)
-
-*Test the shared frontend service with different models*
-
-</div>
+Test the shared frontend service with different models.
 
 ```bash
 # Forward the shared frontend service port
@@ -836,13 +724,7 @@ curl localhost:8000/v1/models | jq
 
 ### Step 5: Set Up LLM Router API Keys
 
-<div align="center">
-
-[![Step 5](https://img.shields.io/badge/Step%205-Setup%20API%20Keys-red?style=for-the-badge&logo=keycdn)](https://github.com/NVIDIA-AI-Blueprints/llm-router)
-
-*Configure API keys for LLM Router integration*
-
-</div>
+Configure API keys for LLM Router integration.
 
 **IMPORTANT**: The router configuration uses Kubernetes secrets for API key management following the [official NVIDIA pattern](https://github.com/NVIDIA-AI-Blueprints/llm-router/blob/main/deploy/helm/llm-router/templates/router-controller-configmap.yaml).
 
@@ -869,13 +751,7 @@ kubectl get secrets -n llm-router
 
 ### Step 6: Deploy LLM Router
 
-<div align="center">
-
-[![Step 6](https://img.shields.io/badge/Step%206-Deploy%20Router-indigo?style=for-the-badge&logo=nvidia)](https://github.com/NVIDIA-AI-Blueprints/llm-router)
-
-*Deploy the NVIDIA LLM Router using Helm*
-
-</div>
+Deploy the NVIDIA LLM Router using Helm.
 
 **Note**: The NVIDIA LLM Router requires building images from source and using the official Helm charts from the GitHub repository.
 
@@ -980,13 +856,7 @@ kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=llm-router -n l
 
 ### Step 7: Configure External Access
 
-<div align="center">
-
-[![Step 7](https://img.shields.io/badge/Step%207-Configure%20Access-teal?style=for-the-badge&logo=nginx)](https://kubernetes.io)
-
-*Configure external access to the LLM Router*
-
-</div>
+Configure external access to the LLM Router.
 
 ```bash
 # For development/testing, use port forwarding to access LLM Router
@@ -996,7 +866,9 @@ kubectl port-forward svc/llm-router-router-controller 8084:8084 -n llm-router
 curl http://localhost:8084/health
 ```
 
-## Configuration
+## Configuration Reference
+
+This section provides detailed configuration options for the LLM Router and Dynamo integration.
 
 ### Ingress Configuration
 
