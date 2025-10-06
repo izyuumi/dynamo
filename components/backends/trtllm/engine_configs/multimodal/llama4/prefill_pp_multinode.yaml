@@ -15,4 +15,4 @@ kv_cache_config:
   enable_block_reuse: false
 
 cache_transceiver_config:
-  backend: DEFAULT
+  backend: default
