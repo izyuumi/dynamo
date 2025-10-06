@@ -37,6 +37,9 @@ spec:
               secretKeyRef:
                 name: hf-token-secret
                 key: HF_TOKEN
+          # Set CONCURRENCIES to the AIConfigurator-recommended value from pareto CSV
+          - name: CONCURRENCIES
+            value: "64"  # Replace with your AIConfigurator-recommended concurrency
         command: ["python3", "-m", "benchmarks.utils.benchmark"]
         args:
           - --model

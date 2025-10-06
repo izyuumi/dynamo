@@ -420,6 +420,14 @@ To customize the benchmark, edit `benchmarks/incluster/benchmark_job.yaml`:
 2. **Change the benchmark name**: Update the `--benchmark-name` argument
 3. **Change the service URL**: Update the `--endpoint-url` argument (use `<svc_name>.<namespace>.svc.cluster.local:port` for cross-namespace access)
 4. **Change Docker image**: Update the image field if needed
+5. **Change concurrency levels**: Add or update the `CONCURRENCIES` environment variable in the `env` section
+   ```yaml
+   env:
+     - name: CONCURRENCIES
+       value: "64"  # Single concurrency level
+     # Or test multiple levels: "1,5,10,50"
+   ```
+   If not set, defaults to: `1,2,5,10,50,100,250`
 
 ### Example: Multi-Namespace Benchmarking
 

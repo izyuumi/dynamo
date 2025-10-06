@@ -131,10 +131,17 @@ export AICONF_DIR=./aiconf_save/QWEN3_32B_XXXXXX
 # Check which configuration AIConfigurator recommended:
 # - Look for "Overall best system chosen: agg" or "Overall best system chosen: disagg" in the output
 # - Or check within $AICONF_DIR/aiconfigurator_result.json
+
+# IMPORTANT: Note the recommended concurrency level from the pareto CSV
+# This will be used in Step 5 for benchmarking
+cat $AICONF_DIR/disagg_pareto.csv | head -5  # or agg_pareto.csv if aggregated
+# Look at the 'concurrency' column in the top row(s) - this is the recommended operating point
+# Example: concurrency=64 with request_rate=13.0
 ```
 
 **Output**: AIConfigurator will analyze the configuration space and generate:
 - Performance predictions and Pareto frontier analysis
+- **Recommended concurrency level** (found in the pareto CSV file)
 - Kubernetes deployment YAML for the recommended configuration (aggregated or disaggregated)
 - Engine configuration files with optimized parameters
 
@@ -241,9 +248,37 @@ kubectl get pods -n $NAMESPACE_2 -l dynamoNamespace=trtllm-disagg
 
 **Why ConfigMap is needed**: The AIConfigurator-optimized deployment uses a custom engine configuration file with tuned parameters, while the baseline uses the built-in engine configs.
 
-### Step 5: Benchmark Both Configurations (Parallel)
+### Step 5: Identify AIConfigurator-Recommended Concurrency
 
-Run the in-cluster benchmarks for both deployments simultaneously:
+AIConfigurator recommends a specific concurrency level for optimal performance. Find this value in the AIC logs or in the pareto CSV file:
+
+```bash
+# View the pareto frontier results to find the recommended concurrency
+cat $AICONF_DIR/disagg_pareto.csv  # or agg_pareto.csv if aggregated was chosen
+
+# Look for the row with the highest tokens/s/gpu or best performance metrics
+# The 'concurrency' column shows the recommended value
+```
+
+**Note**: Benchmarks should test only this specific concurrency value to validate AIConfigurator's predictions at the recommended operating point.
+
+### Step 6: Configure and Deploy Benchmark Jobs
+
+Before deploying the benchmark jobs, update the `CONCURRENCIES` environment variable in the YAML files to match your AIConfigurator-recommended concurrency.
+
+**Edit the benchmark job YAML files:**
+
+The benchmark job YAML files include a `CONCURRENCIES` environment variable that you need to update:
+
+```yaml
+# In benchmarks/incluster/benchmark_baseline_job.yaml
+# In benchmarks/incluster/benchmark_aic_disagg_job.yaml (or benchmark_aic_agg_job.yaml)
+env:
+  - name: CONCURRENCIES
+    value: "64"  # Replace "64" with your AIConfigurator-recommended concurrency
+```
+
+**Deploy the benchmark jobs:**
 
 ```bash
 # Deploy benchmark job for baseline
@@ -273,7 +308,7 @@ kubectl wait --for=condition=complete job/dynamo-benchmark-baseline -n $NAMESPAC
 kubectl wait --for=condition=complete job/dynamo-benchmark-aic -n $NAMESPACE --timeout=3600s
 ```
 
-### Step 6: Retrieve and Analyze Results
+### Step 7: Retrieve and Analyze Results
 
 Download the benchmark results from the PVC:
 
@@ -300,6 +335,8 @@ python3 -m benchmarks.utils.plot \
 ```
 
 ### Step 8: Compare Results
+
+When comparing results, focus on the AIConfigurator-recommended concurrency level since that's where the system is designed to operate optimally.
 
 The plotting script will generate:
 
