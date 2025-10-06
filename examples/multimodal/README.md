@@ -512,15 +512,15 @@ This example demonstrates deploying an aggregated multimodal model that can proc
 - processor: Tokenizes the prompt and passes it to the AudioEncodeWorker.
 - frontend: HTTP endpoint to handle incoming requests.
 
-### Graph
+### Workflow
 
-In this graph, we have two workers, [AudioEncodeWorker](components/audio_encode_worker.py) and [VllmPDWorker](components/worker.py).
+In this workflow, we have two workers, [AudioEncodeWorker](components/audio_encode_worker.py) and [VllmPDWorker](components/worker.py).
 The AudioEncodeWorker is responsible for decoding the audio into embeddings.
 Its VllmPDWorker then prefills and decodes the prompt, just like the [LLM aggregated serving](/components/backends/vllm/README.md) example.
 By separating the audio processing from the prefill and decode stages, we can have a more flexible deployment and scale the
 AudioEncodeWorker independently from the prefill and decode workers if needed.
 
-This figure shows the flow of the graph:
+This figure illustrates the workflow:
 ```mermaid
 flowchart LR
   HTTP --> processor
@@ -607,15 +607,15 @@ This example demonstrates deploying a disaggregated multimodal model that can pr
 - processor: Tokenizes the prompt and passes it to the AudioEncodeWorker.
 - frontend: HTTP endpoint to handle incoming requests.
 
-### Graph
+### Workflow
 
-In this graph, we have three workers, [AudioEncodeWorker](components/audio_encode_worker.py), [VllmDecodeWorker](components/worker.py), and [VllmPDWorker](components/worker.py).
+In this workflow, we have three workers, [AudioEncodeWorker](components/audio_encode_worker.py), [VllmDecodeWorker](components/worker.py), and [VllmPDWorker](components/worker.py).
 For the Qwen/Qwen2-Audio-7B-Instruct model, frames are only required during the prefill stage. As such, the AudioEncodeWorker is connected directly to the prefill worker.
 The AudioEncodeWorker is responsible for decoding the audio into a series of frames and passing them to the prefill worker via RDMA.
 The prefill worker performs the prefilling step and forwards the KV cache to the decode worker for decoding.
 For more details on the roles of the prefill and decode workers, refer to the [LLM disaggregated serving](/components/backends/vllm/README.md) example.
 
-This figure shows the flow of the graph:
+This figure illustrates the workflow:
 ```mermaid
 flowchart LR
   HTTP --> processor
