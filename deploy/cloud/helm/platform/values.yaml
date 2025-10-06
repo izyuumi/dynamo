@@ -74,7 +74,7 @@ dynamo-operator:
   # Core Dynamo platform configuration
   dynamo:
     # -- How long to wait before forcefully terminating Grove instances
-    groveTerminationDelay: 15m
+    groveTerminationDelay: 24h
 
     # Internal utility images used by the platform
     internalImages:
