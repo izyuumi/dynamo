@@ -75,6 +75,7 @@ async def init(runtime: DistributedRuntime, config: Config):
     generate_endpoint = component.endpoint(dynamo_args.endpoint)
 
     prefill_client = None
+    native_api_tasks = []
     if config.serving_mode == DisaggregationMode.DECODE:
         logging.info("Initializing prefill client")
         prefill_client = (
@@ -83,6 +84,9 @@ async def init(runtime: DistributedRuntime, config: Config):
             .endpoint("generate")
             .client()
         )
+    else:
+        native_api_handler = NativeApiHandler(component, engine, metrics_labels)
+        native_api_tasks = await native_api_handler.init_native_apis()
 
     publisher, metrics_task, metrics_labels = await setup_sgl_metrics(engine, component)
 
@@ -106,10 +110,6 @@ async def init(runtime: DistributedRuntime, config: Config):
     handler = DecodeWorkerHandler(
         component, engine, config, publisher, kv_publisher, prefill_client
     )
-
-    native_api_handler = NativeApiHandler(component, engine, metrics_labels)
-
-    native_api_tasks = await native_api_handler.init_native_apis()
 
     async def register_model():
         """Register the model and signal readiness"""
