@@ -74,6 +74,8 @@ async def init(runtime: DistributedRuntime, config: Config):
 
     generate_endpoint = component.endpoint(dynamo_args.endpoint)
 
+    publisher, metrics_task, metrics_labels = await setup_sgl_metrics(engine, component)
+
     prefill_client = None
     native_api_tasks = []
     if config.serving_mode == DisaggregationMode.DECODE:
@@ -87,8 +89,6 @@ async def init(runtime: DistributedRuntime, config: Config):
     else:
         native_api_handler = NativeApiHandler(component, engine, metrics_labels)
         native_api_tasks = await native_api_handler.init_native_apis()
-
-    publisher, metrics_task, metrics_labels = await setup_sgl_metrics(engine, component)
 
     kv_publisher = None
     if server_args.kv_events_config:
