@@ -1,0 +1,50 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: nvidia.com/v1alpha1
+kind: DynamoGraphDeployment
+metadata:
+  name: vllm-disagg-ziqif
+spec:
+  services:
+    Frontend:
+      dynamoNamespace: vllm-disagg-ziqif
+      componentType: frontend
+      replicas: 1
+      extraPodSpec:
+        mainContainer:
+          image: nvcr.io/nvidian/dynamo-dev/dynamo:vllm-kvbm-pd-1002
+    VllmDecodeWorker:
+      dynamoNamespace: vllm-disagg-ziqif
+      envFromSecret: hf-token-secret
+      componentType: worker
+      replicas: 1
+      resources:
+        limits:
+          gpu: "1"
+      extraPodSpec:
+        mainContainer:
+          image: nvcr.io/nvidian/dynamo-dev/dynamo:vllm-kvbm-pd-1002
+          workingDir: /workspace/components/backends/vllm
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - python3 -m dynamo.vllm --model Qwen/Qwen3-8B --gpu-memory-utilization 0.3 --disable-log-requests --max-model-len 32000 --enforce-eager
+    VllmPrefillWorker:
+      dynamoNamespace: vllm-disagg-ziqif
+      envFromSecret: hf-token-secret
+      componentType: worker
+      replicas: 1
+      resources:
+        limits:
+          gpu: "1"
+      extraPodSpec:
+        mainContainer:
+          image: nvcr.io/nvidian/dynamo-dev/dynamo:vllm-kvbm-pd-1002
+          workingDir: /workspace/components/backends/vllm
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - python3 -m dynamo.vllm --model Qwen/Qwen3-8B --is-prefill-worker --gpu-memory-utilization 0.3 --disable-log-requests --max-model-len 32000 --enforce-eager

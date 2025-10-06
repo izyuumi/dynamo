@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: nvidia.com/v1alpha1
+kind: DynamoGraphDeployment
+metadata:
+  name: ziqi-playground
+spec:
+  services:
+    Playground:
+      envFromSecret: hf-token-secret
+      dynamoNamespace: ziqi-playground
+      componentType: worker
+      replicas: 1
+      resources:
+        limits:
+          gpu: "2"
+      extraPodSpec:
+        mainContainer:
+          image: nvcr.io/nvidian/dynamo-dev/dynamo:vllm-kvbm-pd-1002
+          workingDir: /workspace/
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - sleep infinity
