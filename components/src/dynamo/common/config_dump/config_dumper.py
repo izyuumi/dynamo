@@ -200,7 +200,7 @@ def register_encoder(type_class):
         def encode_my_class(obj: MyClass):
             return {"field": obj.field}
     """
-    logger.verbose(f"Registering encoder for {type_class}")
+    logger.debug(f"Registering encoder for {type_class}")
     return _preprocess_for_encode.register(type_class)
 
 
