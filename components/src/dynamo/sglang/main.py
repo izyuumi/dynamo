@@ -89,7 +89,9 @@ async def init(runtime: DistributedRuntime, config: Config):
         )
     # TODO: implement other native APIs and come up with clean layer to apply to agg/disagg/etc
     if config.serving_mode == DisaggregationMode.AGGREGATED:
-        native_api_tasks = await NativeApiHandler(component, engine, metrics_labels).init_native_apis()
+        native_api_tasks = await NativeApiHandler(
+            component, engine, metrics_labels
+        ).init_native_apis()
 
     # Readiness gate: requests wait until model is registered
     ready_event = asyncio.Event()

@@ -9,7 +9,6 @@ import logging
 from typing import List, Optional, Tuple
 
 import sglang as sgl
-from sglang.srt.managers.io_struct import ProfileReqInput
 
 from dynamo._core import Component
 
