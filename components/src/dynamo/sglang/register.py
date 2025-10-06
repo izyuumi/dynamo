@@ -55,8 +55,32 @@ async def _register_llm_with_runtime_config(
         )
         logging.info("Successfully registered LLM with runtime config")
         return True
+    except FileNotFoundError as e:
+        logging.error(f"Model registration failed - file not found: {e}")
+        return False
     except Exception as e:
-        logging.error(f"Failed to register with runtime config: {e}")
+        error_msg = str(e).lower()
+        if "etcd" in error_msg or "failed to create key" in error_msg:
+            logging.error(f"Model registration failed - ETCD connectivity issue: {e}")
+        elif "nats" in error_msg or "jetstream" in error_msg:
+            logging.error(f"Model registration failed - NATS connectivity issue: {e}")
+        elif "invalid utf-8 in model path" in error_msg:
+            logging.error(
+                f"Model registration failed - invalid model path '{server_args.model_path}': {e}"
+            )
+        elif "static endpoint" in error_msg:
+            logging.error(
+                f"Model registration failed - cannot attach to static endpoint: {e}"
+            )
+        elif "download" in error_msg or "modelexpress" in error_msg:
+            logging.error(f"Model registration failed - model download error: {e}")
+        elif "template" in error_msg or "jinja" in error_msg:
+            logging.error(f"Model registration failed - template error: {e}")
+        else:
+            logging.error(
+                f"Model registration failed: {e}. "
+                "Check model path, ETCD/NATS connectivity, and system resources."
+            )
         return False
 
 
@@ -157,10 +181,14 @@ async def register_llm_with_readiness_gate(
         input_type,
     )
     if not registration_success:
-        logging.error("Model registration failed; shutting down")
+        logging.error(
+            "Model registration failed; shutting down. "
+            "See error above for details. Troubleshoot: verify model path, "
+            "check ETCD/NATS services, ensure sufficient resources."
+        )
         if engine is not None:
             engine.shutdown()
-        raise RuntimeError("Model registration failed")
+        raise RuntimeError("Model registration failed - see logs for details")
 
     if readiness_gate:
         readiness_gate.set()
