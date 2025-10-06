@@ -277,17 +277,17 @@ jobs:
         # Apply the updated file
         kubectl apply -n $KUBE_NS -f $DEPLOYMENT_FILE
         
-        # --- Wait for the frontend pod to be ready ---
+        # --- Wait for all pods in the dynamo graph deployment to be ready ---
         sleep 20
-        export POD_NAME=$(kubectl get pods -n ${KUBE_NS} | grep "frontend" | sort -k1 | tail -n1 | awk '{print $1}')
-        echo "Waiting for pod: $POD_NAME"
-        kubectl wait --for=condition=ready pod/$POD_NAME --timeout=1000s
+        # Get the deployment name from the file
+        export GRAPH_NAME=$(yq e '.metadata.name' $DEPLOYMENT_FILE)
+        echo "Waiting for all pods with label nvidia.com/dynamo-graph-deployment-name: $GRAPH_NAME"
+        # Wait for all pods with the deployment label to be ready
+        kubectl wait --for=condition=ready pod -l "nvidia.com/dynamo-graph-deployment-name=$GRAPH_NAME" -n ${KUBE_NS} --timeout=1000s
         
-        # Debug: Show final pod status
-        echo "=== FINAL POD STATUS ==="
-        kubectl get pod $POD_NAME -n $KUBE_NS -o jsonpath='{.status.containerStatuses[*].image}' || true
-        echo ""
-        kubectl get pod $POD_NAME -n $KUBE_NS -o jsonpath='{.status.containerStatuses[*].imageID}' || true
+        # Debug: Show final pod statuses for the deployment
+        echo "=== FINAL POD STATUSES ==="
+        kubectl get pods -l "nvidia.com/dynamo-graph-deployment-name=$GRAPH_NAME" -n $KUBE_NS -o wide
         echo ""
         
         kubectl get all -n $KUBE_NS
@@ -377,5 +377,5 @@ jobs:
         helm uninstall dynamo-platform || true
 
         echo "Namespace $NAMESPACE deletion initiated, proceeding with cleanup..."
-        timeout 7200s kubectl delete namespace $NAMESPACE || true
+        kubectl delete namespace $NAMESPACE || true
         echo "Namespace $NAMESPACE completed."
