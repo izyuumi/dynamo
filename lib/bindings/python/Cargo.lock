@@ -1470,6 +1470,7 @@ dependencies = [
  "akin",
  "anyhow",
  "async-nats",
+ "async-once-cell",
  "async-stream",
  "async-trait",
  "async_zmq",

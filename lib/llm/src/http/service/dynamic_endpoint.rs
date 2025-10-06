@@ -9,8 +9,8 @@ use axum::{
     response::IntoResponse,
     routing::post,
 };
+use dynamo_runtime::component::Client;
 use dynamo_runtime::instances::list_all_instances;
-use dynamo_runtime::{DistributedRuntime, Runtime, component::Client};
 use dynamo_runtime::{pipeline::PushRouter, stream::StreamExt};
 use std::sync::Arc;
 
@@ -50,12 +50,10 @@ async fn inner_dynamic_endpoint_handler(
 
     let fmt_path = format!("/{}", &path);
     if !dynamic_endpoints.contains(&fmt_path) {
-        return Err((StatusCode::NOT_FOUND, "Dynamic endpoint not found"));
+        return Err((StatusCode::NOT_FOUND, "Endpoint not found"));
     }
 
-    let rt = Runtime::from_current()
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get runtime"))?;
-    let drt = DistributedRuntime::from_settings(rt).await.map_err(|_| {
+    let drt = state.distributed_runtime().await.map_err(|_| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to get distributed runtime",

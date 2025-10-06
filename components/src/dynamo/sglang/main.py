@@ -72,11 +72,11 @@ async def init(runtime: DistributedRuntime, config: Config):
 
     generate_endpoint = component.endpoint(dynamo_args.endpoint)
 
-<<<<<<< HEAD
-    publisher, metrics_task, metrics_labels = await setup_sgl_metrics(engine, component)
+    # publisher instantiates the metrics and kv event publishers
+    publisher, metrics_task, metrics_labels = await setup_sgl_metrics(
+        engine, config, component, generate_endpoint
+    )
 
-=======
->>>>>>> main
     prefill_client = None
     native_api_tasks = []
     if config.serving_mode == DisaggregationMode.DECODE:
@@ -87,31 +87,9 @@ async def init(runtime: DistributedRuntime, config: Config):
             .endpoint("generate")
             .client()
         )
-<<<<<<< HEAD
-    else:
-        native_api_handler = NativeApiHandler(component, engine, metrics_labels)
-        native_api_tasks = await native_api_handler.init_native_apis()
-
-    kv_publisher = None
-    if server_args.kv_events_config:
-        kv_events = json.loads(server_args.kv_events_config)
-        ep = kv_events.get("endpoint")
-        zmq_ep = ep.replace("*", get_ip()) if ep else None
-
-        zmq_config = ZmqKvEventPublisherConfig(
-            worker_id=generate_endpoint.lease_id(),
-            kv_block_size=server_args.page_size,
-            zmq_endpoint=zmq_ep,
-        )
-        logging.info(f"Setting up ZMQ kv event publisher at {zmq_ep}")
-        kv_publisher = ZmqKvEventPublisher(component=component, config=zmq_config)
-=======
-
-    # publisher instantiates the metrics and kv event publishers
-    publisher, metrics_task, metrics_labels = await setup_sgl_metrics(
-        engine, config, component, generate_endpoint
-    )
->>>>>>> main
+    # TODO: implement other native APIs and come up with clean layer to apply to agg/disagg/etc
+    if config.serving_mode == DisaggregationMode.AGGREGATED:
+        native_api_tasks = await NativeApiHandler(component, engine, metrics_labels).init_native_apis()
 
     # Readiness gate: requests wait until model is registered
     ready_event = asyncio.Event()
@@ -129,10 +107,6 @@ async def init(runtime: DistributedRuntime, config: Config):
                 metrics_labels=metrics_labels,
                 health_check_payload=health_check_payload,
             ),
-<<<<<<< HEAD
-            register_model(),
-            *native_api_tasks,
-=======
             register_llm_with_readiness_gate(
                 engine,
                 generate_endpoint,
@@ -140,7 +114,7 @@ async def init(runtime: DistributedRuntime, config: Config):
                 dynamo_args,
                 readiness_gate=ready_event,
             ),
->>>>>>> main
+            *native_api_tasks,
         )
     except Exception as e:
         logging.error(f"Failed to serve endpoints: {e}")

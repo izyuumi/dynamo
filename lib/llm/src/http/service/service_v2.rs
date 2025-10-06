@@ -16,21 +16,23 @@ use crate::discovery::ModelManager;
 use crate::endpoint_type::EndpointType;
 use crate::request_template::RequestTemplate;
 use anyhow::Result;
+use async_once_cell::OnceCell;
 use axum_server::tls_rustls::RustlsConfig;
 use derive_builder::Builder;
 use dynamo_runtime::logging::make_request_span;
 use dynamo_runtime::transports::etcd;
+use dynamo_runtime::{DistributedRuntime, Runtime};
 use std::net::SocketAddr;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tower_http::trace::TraceLayer;
 
 /// HTTP service shared state
-#[derive(Default)]
 pub struct State {
     metrics: Arc<Metrics>,
     manager: Arc<ModelManager>,
     etcd_client: Option<etcd::Client>,
+    distributed_runtime: Arc<OnceCell<Arc<DistributedRuntime>>>,
     flags: StateFlags,
 }
 
@@ -76,6 +78,7 @@ impl State {
             manager,
             metrics: Arc::new(Metrics::default()),
             etcd_client: None,
+            distributed_runtime: Arc::new(OnceCell::new()),
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -90,6 +93,7 @@ impl State {
             manager,
             metrics: Arc::new(Metrics::default()),
             etcd_client,
+            distributed_runtime: Arc::new(OnceCell::new()),
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -113,6 +117,17 @@ impl State {
 
     pub fn etcd_client(&self) -> Option<&etcd::Client> {
         self.etcd_client.as_ref()
+    }
+
+    pub async fn distributed_runtime(&self) -> Result<Arc<DistributedRuntime>> {
+        self.distributed_runtime
+            .get_or_try_init(async {
+                let rt = Runtime::from_current()?;
+                let drt = DistributedRuntime::from_settings(rt).await?;
+                Ok(Arc::new(drt))
+            })
+            .await
+            .map(|drt| drt.clone())
     }
 
     // TODO

@@ -42,8 +42,6 @@ class NativeApiHandler:
         tasks = []
 
         model_info_ep = self.component.endpoint("get_model_info")
-        start_profile_ep = self.component.endpoint("start_profile")
-        stop_profile_ep = self.component.endpoint("stop_profile")
         tasks.extend(
             [
                 model_info_ep.serve_endpoint(
@@ -51,18 +49,6 @@ class NativeApiHandler:
                     graceful_shutdown=True,
                     metrics_labels=self.metrics_labels,
                     http_endpoint_path="/get_model_info",
-                ),
-                start_profile_ep.serve_endpoint(
-                    self.start_profile,
-                    graceful_shutdown=True,
-                    metrics_labels=self.metrics_labels,
-                    http_endpoint_path="/start_profile",
-                ),
-                stop_profile_ep.serve_endpoint(
-                    self.stop_profile,
-                    graceful_shutdown=True,
-                    metrics_labels=self.metrics_labels,
-                    http_endpoint_path="/stop_profile",
                 ),
             ]
         )
@@ -80,39 +66,3 @@ class NativeApiHandler:
         }
 
         yield {"data": [result]}
-
-    async def start_profile(self, request: dict):
-        try:
-            obj = ProfileReqInput.model_validate(request)
-        except Exception:
-            obj = None
-
-        if obj is None:
-            obj = ProfileReqInput()
-
-        output_dir = obj.output_dir or f"profile_{self.tm.server_args.model_path}"
-
-        await self.tm.start_profile(
-            output_dir=output_dir,
-            start_step=obj.start_step,
-            num_steps=obj.num_steps,
-            activities=obj.activities,
-            with_stack=obj.with_stack,
-            record_shapes=obj.record_shapes,
-            profile_by_stage=obj.profile_by_stage,
-        )
-
-        yield {"data": [{"status": "started profile"}]}
-
-    async def stop_profile(self, request: dict):
-        asyncio.create_task(self.tm.stop_profile())
-        yield {
-            "data": [
-                {
-                    "status": (
-                        "Stopped profile. This might take a long time to complete. "
-                        f"Results should be available in the 'profile_{self.tm.server_args.model_path}' directory."
-                    )
-                }
-            ]
-        }
