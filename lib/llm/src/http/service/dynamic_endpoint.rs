@@ -33,12 +33,15 @@ pub fn dynamic_endpoint_router(
 async fn inner_dynamic_endpoint_handler(
     state: Arc<service_v2::State>,
     path: String,
-) -> Result<impl IntoResponse, &'static str> {
-    let etcd_client = state.etcd_client().ok_or("Failed to get etcd client")?;
+) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
+    let etcd_client = state.etcd_client().ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Failed to get etcd client",
+    ))?;
 
     let instances = list_all_instances(etcd_client)
         .await
-        .map_err(|_| "Failed to get instances")?;
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get instances"))?;
 
     let dynamic_endpoints = instances
         .iter()
@@ -47,13 +50,17 @@ async fn inner_dynamic_endpoint_handler(
 
     let fmt_path = format!("/{}", &path);
     if !dynamic_endpoints.contains(&fmt_path) {
-        return Err("Dynamic endpoint not found");
+        return Err((StatusCode::NOT_FOUND, "Dynamic endpoint not found"));
     }
 
-    let rt = Runtime::from_current().map_err(|_| "Failed to get runtime")?;
-    let drt = DistributedRuntime::from_settings(rt)
-        .await
-        .map_err(|_| "Failed to get distributed runtime")?;
+    let rt = Runtime::from_current()
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get runtime"))?;
+    let drt = DistributedRuntime::from_settings(rt).await.map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to get distributed runtime",
+        )
+    })?;
 
     let target_instances = instances
         .iter()
@@ -64,12 +71,15 @@ async fn inner_dynamic_endpoint_handler(
     for instance in target_instances {
         let ns = drt
             .namespace(instance.namespace.clone())
-            .map_err(|_| "Failed to get namespace")?;
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get namespace"))?;
         let c = ns
             .component(instance.component.clone())
-            .map_err(|_| "Failed to get component")?;
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get component"))?;
         let ep = c.endpoint(path.clone());
-        let client = ep.client().await.map_err(|_| "Failed to get client")?;
+        let client = ep
+            .client()
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get client"))?;
         target_clients.push(client);
     }
 
@@ -78,12 +88,12 @@ async fn inner_dynamic_endpoint_handler(
         let router =
             PushRouter::<(), Annotated<serde_json::Value>>::from_client(client, Default::default())
                 .await
-                .map_err(|_| "Failed to get router")?;
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get router"))?;
 
         let mut stream = router
             .round_robin(().into())
             .await
-            .map_err(|_| "Failed to route")?;
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to route"))?;
 
         while let Some(resp) = stream.next().await {
             all_responses.push(resp);
@@ -101,9 +111,9 @@ async fn dynamic_endpoint_handler(
 ) -> impl IntoResponse {
     inner_dynamic_endpoint_handler(state, path)
         .await
-        .map_err(|err_string| {
+        .map_err(|(status_code, err_string)| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                status_code,
                 Json(serde_json::json!({
                     "message": err_string
                 })),
