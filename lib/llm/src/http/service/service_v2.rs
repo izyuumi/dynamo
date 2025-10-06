@@ -126,8 +126,7 @@ impl State {
                 let drt = DistributedRuntime::from_settings(rt).await?;
                 Ok(Arc::new(drt))
             })
-            .await
-            .map(|drt| drt.clone())
+            .await.cloned()
     }
 
     // TODO
