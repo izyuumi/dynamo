@@ -62,6 +62,7 @@ def completion_payload_default(
         expected_response=expected_response or ["AI"],
     )
 
+
 def metric_payload_default(
     min_num_requests: int,
     repeat_count: int = 1,

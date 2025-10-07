@@ -205,14 +205,14 @@ class ModelInfoPayload(BasePayload):
         result = response.json()
         assert "responses" in result, "Missing 'responses' in response"
         assert len(result["responses"]) > 0, "Empty responses in response"
-        
+
         data = result["responses"][0].get("data", {})
         assert "data" in data, "Missing 'data' in response data"
         assert len(data["data"]) > 0, "Empty data in response"
-        
+
         model_info = data["data"][0]
         assert "model_path" in model_info, "Missing 'model_path' in model info"
-        
+
         return f"Model: {model_info['model_path']}"
 
     def response_handler(self, response: Any) -> str:
