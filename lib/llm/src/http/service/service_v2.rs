@@ -20,6 +20,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use derive_builder::Builder;
 use dynamo_runtime::logging::make_request_span;
 use dynamo_runtime::transports::etcd;
+use dynamo_runtime::DistributedRuntime;
 use std::net::SocketAddr;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -31,6 +32,7 @@ pub struct State {
     metrics: Arc<Metrics>,
     manager: Arc<ModelManager>,
     etcd_client: Option<etcd::Client>,
+    drt: Option<DistributedRuntime>,
     flags: StateFlags,
 }
 
@@ -76,6 +78,7 @@ impl State {
             manager,
             metrics: Arc::new(Metrics::default()),
             etcd_client: None,
+            drt: None,
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -85,11 +88,13 @@ impl State {
         }
     }
 
-    pub fn new_with_etcd(manager: Arc<ModelManager>, etcd_client: Option<etcd::Client>) -> Self {
+    pub fn new_with_drt(manager: Arc<ModelManager>, drt: Option<DistributedRuntime>) -> Self {
+        let etcd_client = drt.as_ref().and_then(|drt| drt.etcd_client().clone());
         Self {
             manager,
             metrics: Arc::new(Metrics::default()),
             etcd_client,
+            drt,
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -118,6 +123,10 @@ impl State {
     // TODO
     pub fn sse_keep_alive(&self) -> Option<Duration> {
         None
+    }
+
+    pub fn drt(&self) -> Option<&DistributedRuntime> {
+        self.drt.as_ref()
     }
 }
 
@@ -171,7 +180,7 @@ pub struct HttpServiceConfig {
     request_template: Option<RequestTemplate>,
 
     #[builder(default = "None")]
-    etcd_client: Option<etcd::Client>,
+    drt: Option<DistributedRuntime>,
 }
 
 impl HttpService {
@@ -278,6 +287,8 @@ static HTTP_SVC_METRICS_PATH_ENV: &str = "DYN_HTTP_SVC_METRICS_PATH";
 static HTTP_SVC_MODELS_PATH_ENV: &str = "DYN_HTTP_SVC_MODELS_PATH";
 /// Environment variable to set the health endpoint path (default: `/health`)
 static HTTP_SVC_HEALTH_PATH_ENV: &str = "DYN_HTTP_SVC_HEALTH_PATH";
+/// Environment variable to set the dump_config endpoint path (default: `/dump_config`)
+static HTTP_SVC_DUMP_CONFIG_PATH_ENV: &str = "DYN_HTTP_SVC_DUMP_CONFIG_PATH";
 /// Environment variable to set the live endpoint path (default: `/live`)
 static HTTP_SVC_LIVE_PATH_ENV: &str = "DYN_HTTP_SVC_LIVE_PATH";
 /// Environment variable to set the chat completions endpoint path (default: `/v1/chat/completions`)
@@ -294,8 +305,7 @@ impl HttpServiceConfigBuilder {
         let config: HttpServiceConfig = self.build_internal()?;
 
         let model_manager = Arc::new(ModelManager::new());
-        let etcd_client = config.etcd_client;
-        let state = Arc::new(State::new_with_etcd(model_manager, etcd_client));
+        let state = Arc::new(State::new_with_drt(model_manager, config.drt));
 
         state
             .flags
@@ -325,6 +335,7 @@ impl HttpServiceConfigBuilder {
             super::openai::list_models_router(state.clone(), var(HTTP_SVC_MODELS_PATH_ENV).ok()),
             super::health::health_check_router(state.clone(), var(HTTP_SVC_HEALTH_PATH_ENV).ok()),
             super::health::live_check_router(state.clone(), var(HTTP_SVC_LIVE_PATH_ENV).ok()),
+            super::config::dump_config_router(state.clone(), var(HTTP_SVC_DUMP_CONFIG_PATH_ENV).ok()),
         ];
 
         let endpoint_routes =
@@ -355,8 +366,8 @@ impl HttpServiceConfigBuilder {
         self
     }
 
-    pub fn with_etcd_client(mut self, etcd_client: Option<etcd::Client>) -> Self {
-        self.etcd_client = Some(etcd_client);
+    pub fn with_drt(mut self, distributed_runtime: Option<DistributedRuntime>) -> Self {
+        self.drt = Some(distributed_runtime);
         self
     }
 
