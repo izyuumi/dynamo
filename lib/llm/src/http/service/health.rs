@@ -2,22 +2,28 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::{RouteDoc, service_v2};
-use axum::{Json, Router, http::Method, http::StatusCode, response::IntoResponse, routing::get};
+use axum::{Extension, Json, Router, http::Method, http::StatusCode, response::IntoResponse, routing::get};
 use dynamo_runtime::instances::list_all_instances;
+use dynamo_runtime::DistributedRuntime;
 use serde_json::json;
 use std::sync::Arc;
 
 pub fn health_check_router(
     state: Arc<service_v2::State>,
     path: Option<String>,
+    drt: Option<DistributedRuntime>,
 ) -> (Vec<RouteDoc>, Router) {
     let health_path = path.unwrap_or_else(|| "/health".to_string());
 
     let docs: Vec<RouteDoc> = vec![RouteDoc::new(Method::GET, &health_path)];
 
-    let router = Router::new()
+    let mut router = Router::new()
         .route(&health_path, get(health_handler))
         .with_state(state);
+
+    if let Some(drt) = drt {
+        router = router.layer(Extension(Arc::new(drt)));
+    }
 
     (docs, router)
 }
@@ -50,11 +56,8 @@ async fn live_handler(
 }
 
 async fn health_handler(
-    axum::extract::State(state): axum::extract::State<Arc<service_v2::State>>,
+    Extension(drt): Extension<Arc<DistributedRuntime>>,
 ) -> impl IntoResponse {
-    let drt = state
-        .distributed_runtime()
-        .expect("Failed to get distributed runtime");
     let instances = if let Some(etcd_client) = drt.etcd_client() {
         match list_all_instances(&etcd_client).await {
             Ok(instances) => instances,
