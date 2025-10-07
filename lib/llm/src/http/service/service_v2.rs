@@ -335,7 +335,7 @@ impl HttpServiceConfigBuilder {
             super::openai::list_models_router(state.clone(), var(HTTP_SVC_MODELS_PATH_ENV).ok()),
             super::health::health_check_router(state.clone(), var(HTTP_SVC_HEALTH_PATH_ENV).ok()),
             super::health::live_check_router(state.clone(), var(HTTP_SVC_LIVE_PATH_ENV).ok()),
-            super::config::dump_config_router(state.clone(), var(HTTP_SVC_DUMP_CONFIG_PATH_ENV).ok()),
+            super::dump_config::dump_config_router(state.clone(), var(HTTP_SVC_DUMP_CONFIG_PATH_ENV).ok()),
         ];
 
         let endpoint_routes =
