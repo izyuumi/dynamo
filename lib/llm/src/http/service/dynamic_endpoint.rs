@@ -41,12 +41,15 @@ async fn inner_dynamic_endpoint_handler(
     state: Arc<service_v2::State>,
     path: String,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    let etcd_client = state.etcd_client().ok_or((
+    let drt = state
+        .distributed_runtime()
+        .expect("Failed to get distributed runtime");
+    let etcd_client = drt.etcd_client().ok_or((
         StatusCode::INTERNAL_SERVER_ERROR,
         "Failed to get etcd client",
     ))?;
 
-    let instances = list_all_instances(etcd_client)
+    let instances = list_all_instances(&etcd_client)
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get instances"))?;
 
@@ -59,13 +62,6 @@ async fn inner_dynamic_endpoint_handler(
     if !dynamic_endpoints.contains(&fmt_path) {
         return Err((StatusCode::NOT_FOUND, "Endpoint not found"));
     }
-
-    let drt = state.distributed_runtime().await.map_err(|_| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to get distributed runtime",
-        )
-    })?;
 
     let target_instances = instances
         .iter()
