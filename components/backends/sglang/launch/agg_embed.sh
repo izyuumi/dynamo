@@ -12,7 +12,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # run clear_namespace
-python3 -m dynamo.sglang.clear_namespace --namespace dynamo
+python3 -m dynamo.sglang.utils.clear_namespace --namespace dynamo
 
 # run ingress
 python3 -m dynamo.frontend --http-port=8000 &
@@ -20,8 +20,10 @@ DYNAMO_PID=$!
 
 # run worker
 python3 -m dynamo.sglang \
-  --model-path Qwen/Qwen3-0.6B \
-  --served-model-name Qwen/Qwen3-0.6B \
+  --embedding-worker \
+  --model-path Qwen/Qwen3-Embedding-4B \
+  --served-model-name Qwen/Qwen3-Embedding-4B \
   --page-size 16 \
   --tp 1 \
-  --trust-remote-code
+  --trust-remote-code \
+  --use-sglang-tokenizer
