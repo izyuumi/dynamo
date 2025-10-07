@@ -57,6 +57,7 @@ class NativeApiHandler:
         return tasks
 
     async def get_model_info(self, request: dict):
+        _ = request
         result = {
             "model_path": self.tm.server_args.model_path,
             "tokenizer_path": self.tm.server_args.tokenizer_path,

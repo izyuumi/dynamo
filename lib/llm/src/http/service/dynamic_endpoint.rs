@@ -76,11 +76,17 @@ async fn inner_dynamic_endpoint_handler(
         let c = ns
             .component(instance.component.clone())
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get component"))?;
-        let ep = c.endpoint(path.clone());
+        let ep = c.endpoint(instance.endpoint.clone());
         let client = ep
             .client()
             .await
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get client"))?;
+        client.wait_for_instances().await.map_err(|_| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to wait for instances",
+            )
+        })?;
         target_clients.push(client);
     }
 
@@ -91,10 +97,10 @@ async fn inner_dynamic_endpoint_handler(
                 .await
                 .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get router"))?;
 
-        let mut stream = router
-            .round_robin(().into())
-            .await
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to route"))?;
+        let mut stream = router.round_robin(().into()).await.map_err(|e| {
+            tracing::error!("Failed to route: {:?}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to route")
+        })?;
 
         while let Some(resp) = stream.next().await {
             all_responses.push(resp);
