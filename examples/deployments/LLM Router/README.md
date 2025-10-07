@@ -41,7 +41,7 @@ export DYNAMO_VERSION=0.5.0
 export HF_TOKEN=your_hf_token
 
 # 2. Install Dynamo Platform
-# Follow: https://github.com/ai-dynamo/dynamo/blob/main/docs/guides/dynamo_deploy/installation_guide.md#path-a-production-install
+# Follow: https://github.com/ai-dynamo/dynamo/blob/main/docs/kubernetes/installation_guide.md#path-a-production-install
 
 # 3. Deploy a model (Llama-8B for quick testing)
 export MODEL_NAME=meta-llama/Llama-3.1-8B-Instruct
@@ -398,7 +398,7 @@ For optimal deployment experience, consider model size vs. resources:
 
 Before deploying the LLM Router integration, ensure you have:
 
-1. **Dynamo Platform Prerequisites** - Follow the [Dynamo Installation Guide](../../../docs/guides/dynamo_deploy/installation_guide.md#prerequisites) for:
+1. **Dynamo Platform Prerequisites** - Follow the [Dynamo Installation Guide](../../../docs/kubernetes/installation_guide.md#prerequisites) for:
    - Required tools (kubectl v1.24+, Helm v3.0+, Docker)
    - Kubernetes cluster with NVIDIA GPU nodes
    - Container registry access
@@ -581,13 +581,13 @@ graph LR
 
 ### Step 1: Install Dynamo Platform
 
-If you haven't already installed the Dynamo platform, follow the **[Dynamo Installation Guide - Path A: Production Install](../../../docs/guides/dynamo_deploy/installation_guide.md#path-a-production-install)** to:
+If you haven't already installed the Dynamo platform, follow the **[Dynamo Installation Guide - Path A: Production Install](../../../docs/kubernetes/installation_guide.md#path-a-production-install)** to:
 
 1. Install Dynamo CRDs
 2. Install Dynamo Platform
 3. Verify the installation
 
-> **Note**: For a quick reference, see the [Deployment Quickstart](../../../docs/guides/dynamo_deploy/README.md#1-install-platform-first).
+> **Note**: For a quick reference, see the [Deployment Quickstart](../../../docs/kubernetes/README.md#1-install-platform-first).
 
 ### Step 2: Deploy Multiple vLLM Models
 
