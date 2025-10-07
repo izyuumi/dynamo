@@ -7,7 +7,7 @@ use super::{
     Instance, InstanceEvent, InstanceEventStream, InstanceHandle, InstanceStatus, ServiceDiscovery,
     ServiceRegistry,
 };
-use crate::{transports::etcd, Result};
+use crate::{Result, transports::etcd};
 use async_stream::stream;
 use async_trait::async_trait;
 use futures::Stream;
@@ -92,6 +92,17 @@ impl InstanceHandle for EtcdInstanceHandle {
     }
 }
 
+#[inline]
+fn etcd_instance_id_from_key(key_bytes: &[u8]) -> Option<String> {
+    // Fast path: avoid allocating unless everything checks out.
+    let s = std::str::from_utf8(key_bytes).ok()?;
+    let (_, tail) = s.rsplit_once('/')?;
+    if tail.is_empty() {
+        return None;
+    }
+    Some(tail.to_owned())
+}
+
 /// ETCD implementation of ServiceDiscovery and ServiceRegistry
 #[derive(Clone)]
 pub struct EtcdServiceDiscovery {
@@ -123,16 +134,20 @@ impl EtcdServiceDiscovery {
     }
 
     /// Parse instance from ETCD key-value pair
-    fn parse_instance(&self, kv: &etcd::KeyValue, namespace: &str, component: &str) -> Result<Option<Instance>> {
-        let key = String::from_utf8_lossy(kv.key());
+    fn parse_instance(
+        &self,
+        kv: &etcd::KeyValue,
+        namespace: &str,
+        component: &str,
+    ) -> Result<Option<Instance>> {
         let value = kv.value();
 
-        // Extract instance ID from key (last part after final '/')
-        let instance_id = key
-            .split('/')
-            .last()
-            .ok_or_else(|| crate::error!("Invalid ETCD key format: {}", key))?
-            .to_string();
+        let instance_id = etcd_instance_id_from_key(kv.key()).ok_or_else(|| {
+            crate::error!(
+                "Invalid ETCD key format: {}",
+                String::from_utf8_lossy(kv.key())
+            )
+        })?;
 
         // Parse metadata
         let etcd_metadata: EtcdInstanceMetadata = serde_json::from_slice(value)
@@ -181,44 +196,36 @@ impl ServiceDiscovery for EtcdServiceDiscovery {
             while let Some(event) = rx.recv().await {
                 match event {
                     etcd::WatchEvent::Put(kv) => {
-                        // Parse instance inline to avoid lifetime issues
-                        let key = String::from_utf8_lossy(kv.key());
                         let value = kv.value();
 
-                        // Extract instance ID from key (last part after final '/')
-                        if let Some(instance_id) = key.split('/').last() {
-                            // Parse metadata
-                            if let Ok(etcd_metadata) = serde_json::from_slice::<EtcdInstanceMetadata>(value) {
-                                // Only return instances that are ready
-                                if etcd_metadata.status == InstanceStatus::Ready {
-                                    let instance = Instance::new(
-                                        instance_id.to_string(),
-                                        etcd_metadata.address,
-                                        namespace.clone(),
-                                        component.clone(),
-                                    );
-                                    yield InstanceEvent::Added(instance);
-                                }
-                            }
+                        if let Some(instance_id) = etcd_instance_id_from_key(kv.key())
+                            && let Ok(etcd_metadata) = serde_json::from_slice::<EtcdInstanceMetadata>(value)
+                            && etcd_metadata.status == InstanceStatus::Ready
+                        {
+                            let instance = Instance::new(
+                                instance_id,
+                                etcd_metadata.address,
+                                namespace.clone(),
+                                component.clone(),
+                            );
+                            yield InstanceEvent::Added(instance);
                         }
                     }
+
                     etcd::WatchEvent::Delete(kv) => {
-                        // For delete events, we need to reconstruct the instance from the key
-                        let key = String::from_utf8_lossy(kv.key());
-                        if let Some(instance_id) = key.split('/').last() {
-                            // We don't have the address for deleted instances, so use empty string
+                        if let Some(instance_id) = etcd_instance_id_from_key(kv.key()) {
                             let instance = Instance::new(
-                                instance_id.to_string(),
-                                "".to_string(),
+                                instance_id,
+                                String::new(), // no address on delete
                                 namespace.clone(),
                                 component.clone(),
                             );
                             yield InstanceEvent::Removed(instance);
                         }
-                    }
-                }
-            }
-        };
+                    } // <— CLOSES Delete arm
+                } // <— CLOSES match
+            } // <— CLOSES while
+        }; // <— CLOSES stream! macro
 
         Ok(Box::pin(stream))
     }
@@ -236,7 +243,11 @@ impl ServiceRegistry for EtcdServiceDiscovery {
         let instance_id = format!("{:x}", lease_id);
 
         // Create ETCD key for this instance
-        let etcd_key = format!("{}{}", self.get_key_prefix(namespace, component), instance_id);
+        let etcd_key = format!(
+            "{}{}",
+            self.get_key_prefix(namespace, component),
+            instance_id
+        );
 
         // TODO: Get actual network address - for now use placeholder
         let address = "localhost:8080".to_string();
@@ -271,22 +282,28 @@ mod tests {
         let discovery = EtcdServiceDiscovery::new(etcd_client);
 
         // Test registration
-        let handle = discovery.register_instance("test-ns", "test-component").await?;
-        
+        let handle = discovery
+            .register_instance("test-ns", "test-component")
+            .await?;
+
         // Set metadata
         let mut metadata = HashMap::new();
-        metadata.insert("key1".to_string(), serde_json::Value::String("value1".to_string()));
+        metadata.insert(
+            "key1".to_string(),
+            serde_json::Value::String("value1".to_string()),
+        );
         handle.set_metadata(metadata).await?;
 
         // Set ready
         handle.set_ready(InstanceStatus::Ready).await?;
 
         // Test discovery
-        let instances = discovery.list_instances("test-ns", "test-component").await?;
+        let instances = discovery
+            .list_instances("test-ns", "test-component")
+            .await?;
         assert_eq!(instances.len(), 1);
         assert_eq!(instances[0].id, handle.instance_id());
 
         Ok(())
     }
 }
-

@@ -5,7 +5,7 @@
 //!
 //! This implementation follows the EndpointSlice discovery mechanism as described in the design doc:
 //! 1. Pods have namespace and component labels that match the method args
-//! 2. A Kubernetes Service selects pods based on namespace and component labels  
+//! 2. A Kubernetes Service selects pods based on namespace and component labels
 //! 3. EndpointSlices are automatically managed by Kubernetes and track ready pod endpoints
 //! 4. We watch EndpointSlices to get notifications when instances become ready/unavailable
 
@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, pin::Pin, sync::Arc};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 
 // TODO: Add kube crate dependency to Cargo.toml
 // use kube::{Api, Client, ResourceExt, api::{ListParams, WatchEvent, WatchParams}};
@@ -75,20 +75,26 @@ impl KubernetesInstanceHandle {
         let readiness_status = self.readiness_status.clone();
 
         let app = axum::Router::new()
-            .route("/metadata", axum::routing::get(move || async move {
-                let metadata = metadata.read().await;
-                axum::Json(metadata.metadata.clone())
-            }))
-            .route("/health", axum::routing::get({
-                let readiness_status = readiness_status.clone();
-                move || async move {
-                    let status = readiness_status.read().await;
-                    match *status {
-                        InstanceStatus::Ready => axum::http::StatusCode::OK,
-                        InstanceStatus::NotReady => axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            .route(
+                "/metadata",
+                axum::routing::get(move || async move {
+                    let metadata = metadata.read().await;
+                    axum::Json(metadata.metadata.clone())
+                }),
+            )
+            .route(
+                "/health",
+                axum::routing::get({
+                    let readiness_status = readiness_status.clone();
+                    move || async move {
+                        let status = readiness_status.read().await;
+                        match *status {
+                            InstanceStatus::Ready => axum::http::StatusCode::OK,
+                            InstanceStatus::NotReady => axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                        }
                     }
-                }
-            }));
+                }),
+            );
 
         let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port))
             .await
@@ -177,8 +183,14 @@ impl KubernetesServiceDiscovery {
     /// Get label selectors for namespace and component
     fn get_label_selectors(&self, namespace: &str, component: &str) -> HashMap<String, String> {
         let mut selectors = HashMap::new();
-        selectors.insert(format!("{}-namespace", self.label_prefix), namespace.to_string());
-        selectors.insert(format!("{}-component", self.label_prefix), component.to_string());
+        selectors.insert(
+            format!("{}-namespace", self.label_prefix),
+            namespace.to_string(),
+        );
+        selectors.insert(
+            format!("{}-component", self.label_prefix),
+            component.to_string(),
+        );
         selectors
     }
 
@@ -195,7 +207,7 @@ impl KubernetesServiceDiscovery {
         // 2. Extract pod name from endpoint.targetRef.name
         // 3. Get address from endpoint.addresses[0]
         // 4. Return Instance if ready, None otherwise
-        
+
         tracing::warn!("parse_instance_from_endpoint not implemented - requires kube crate");
         Ok(None)
     }
@@ -213,7 +225,7 @@ impl KubernetesServiceDiscovery {
         }
 
         // Last resort: generate a unique name
-        Ok(format!("pod-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()))
+        Ok(format!("pod-{}", &uuid::Uuid::new_v4().to_string()[..8]))
     }
 
     /// Verify that the current pod has the required labels
@@ -223,7 +235,7 @@ impl KubernetesServiceDiscovery {
         // 1. Get current pod using pod name
         // 2. Verify it has the required namespace and component labels
         // 3. Return error if labels don't match
-        
+
         tracing::warn!(
             "verify_pod_labels not implemented - assuming pod has correct labels for {}/{}",
             _namespace,
@@ -239,7 +251,7 @@ impl KubernetesServiceDiscovery {
         // 1. Check if service exists
         // 2. Create service if it doesn't exist with proper label selectors
         // 3. Service should select pods with namespace and component labels
-        
+
         tracing::warn!(
             "ensure_service_exists not implemented - assuming service exists for {}/{}",
             _namespace,
@@ -258,7 +270,7 @@ impl ServiceDiscovery for KubernetesServiceDiscovery {
         // 2. Query EndpointSlices for the service using label selector
         // 3. Parse endpoints that are ready
         // 4. Return list of Instance objects
-        
+
         tracing::warn!(
             "list_instances not implemented for Kubernetes - returning empty list for {}/{}",
             _namespace,
@@ -273,7 +285,7 @@ impl ServiceDiscovery for KubernetesServiceDiscovery {
         // 1. Set up kubectl watch for EndpointSlices with service label selector
         // 2. Parse watch events and convert to InstanceEvent
         // 3. Return stream of events
-        
+
         tracing::warn!(
             "watch not implemented for Kubernetes - returning empty stream for {}/{}",
             _namespace,
@@ -309,11 +321,8 @@ impl ServiceRegistry for KubernetesServiceDiscovery {
         let pod_name = self.get_current_pod_name().await?;
 
         // Create instance handle
-        let mut handle = KubernetesInstanceHandle::new(
-            pod_name,
-            self.namespace.clone(),
-            component.to_string(),
-        );
+        let mut handle =
+            KubernetesInstanceHandle::new(pod_name, self.namespace.clone(), component.to_string());
 
         // Start metadata server on port 8080 (should match readiness probe)
         handle.start_metadata_server(8080).await?;
@@ -355,7 +364,7 @@ mod tests {
     async fn test_label_selectors() -> Result<()> {
         let discovery = KubernetesServiceDiscovery::new("test-ns".to_string()).await?;
         let selectors = discovery.get_label_selectors("dynamo", "decode");
-        
+
         assert_eq!(
             selectors.get("nvidia.com/dynamo-namespace"),
             Some(&"dynamo".to_string())
@@ -376,10 +385,13 @@ mod tests {
         );
 
         assert_eq!(handle.instance_id(), "test-pod-123");
-        
+
         // Test setting metadata
         let mut metadata = HashMap::new();
-        metadata.insert("key1".to_string(), serde_json::Value::String("value1".to_string()));
+        metadata.insert(
+            "key1".to_string(),
+            serde_json::Value::String("value1".to_string()),
+        );
         handle.set_metadata(metadata.clone()).await?;
 
         // Test setting ready status
