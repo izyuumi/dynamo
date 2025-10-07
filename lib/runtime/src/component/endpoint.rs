@@ -145,10 +145,14 @@ impl EndpointConfigBuilder {
                 transport: TransportType::NatsTcp(subject.clone()),
                 http_endpoint_path: http_endpoint_path.clone(),
             };
-            tracing::debug!(subject = %subject, "Registering endpoint health check target");
+            tracing::debug!(endpoint_name = %endpoint_name, "Registering endpoint health check target");
             let guard = system_health.lock().unwrap();
-            guard.register_health_check_target(&subject, instance, health_check_payload.clone());
-            if let Some(notifier) = guard.get_endpoint_health_check_notifier(&subject) {
+            guard.register_health_check_target(
+                &endpoint_name,
+                instance,
+                health_check_payload.clone(),
+            );
+            if let Some(notifier) = guard.get_endpoint_health_check_notifier(&endpoint_name) {
                 handler.set_endpoint_health_check_notifier(notifier)?;
             }
         }
