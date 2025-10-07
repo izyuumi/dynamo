@@ -6,10 +6,10 @@ import logging
 import signal
 import sys
 
-import sglang as sgl
 import uvloop
-from sglang.srt.utils import get_ip, launch_dummy_health_check_server
+from sglang.srt.utils import launch_dummy_health_check_server
 
+import sglang as sgl
 from dynamo.llm import ModelInput, ModelType
 from dynamo.runtime import DistributedRuntime, dynamo_worker
 from dynamo.runtime.logging import configure_dynamo_logging
