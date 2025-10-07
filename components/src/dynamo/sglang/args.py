@@ -15,6 +15,7 @@ from typing import Any, Dict, Generator, List, Optional
 from sglang.srt.server_args import ServerArgs
 
 from dynamo._core import get_reasoning_parser_names, get_tool_parser_names
+from dynamo.common.config_dump import register_encoder
 from dynamo.runtime.logging import configure_dynamo_logging
 from dynamo.sglang import __version__
 
@@ -79,6 +80,18 @@ DYNAMO_ARGS: Dict[str, Dict[str, Any]] = {
         "default": False,
         "help": "Run as multimodal worker component for LLM inference with multimodal data",
     },
+    "embedding-worker": {
+        "flags": ["--embedding-worker"],
+        "action": "store_true",
+        "default": False,
+        "help": "Run as embedding worker component (Dynamo flag, also sets SGLang's --is-embedding)",
+    },
+    "dump-config-to": {
+        "flags": ["--dump-config-to"],
+        "type": str,
+        "default": None,
+        "help": "Dump debug config to the specified file path. If not specified, the config will be dumped to stdout at INFO level.",
+    },
 }
 
 
@@ -101,6 +114,11 @@ class DynamoArgs:
     multimodal_processor: bool = False
     multimodal_encode_worker: bool = False
     multimodal_worker: bool = False
+
+    # embedding options
+    embedding_worker: bool = False
+    # config dump options
+    dump_config_to: Optional[str] = None
 
 
 class DisaggregationMode(Enum):
@@ -126,6 +144,20 @@ class Config:
             return DisaggregationMode.DECODE
         else:
             return DisaggregationMode.AGGREGATED
+
+
+# Register SGLang-specific encoders with the shared system
+@register_encoder(Config)
+def _preprocess_for_encode_config(
+    config: Config,
+) -> Dict[str, Any]:  # pyright: ignore[reportUnusedFunction]
+    return {
+        "server_args": config.server_args,
+        "dynamo_args": config.dynamo_args,
+        "serving_mode": config.serving_mode.value
+        if config.serving_mode is not None
+        else "None",
+    }
 
 
 def _set_parser(
@@ -221,9 +253,15 @@ def parse_args(args: list[str]) -> Config:
     # otherwise fall back to default endpoints
     namespace = os.environ.get("DYN_NAMESPACE", "dynamo")
 
+    # If --embedding-worker is set, also set SGLang's --is-embedding flag
+    if parsed_args.embedding_worker:
+        parsed_args.is_embedding = True
+
     endpoint = parsed_args.endpoint
     if endpoint is None:
-        if (
+        if parsed_args.embedding_worker:
+            endpoint = f"dyn://{namespace}.backend.generate"
+        elif (
             hasattr(parsed_args, "disaggregation_mode")
             and parsed_args.disaggregation_mode == "prefill"
         ):
@@ -291,6 +329,8 @@ def parse_args(args: list[str]) -> Config:
         multimodal_processor=parsed_args.multimodal_processor,
         multimodal_encode_worker=parsed_args.multimodal_encode_worker,
         multimodal_worker=parsed_args.multimodal_worker,
+        embedding_worker=parsed_args.embedding_worker,
+        dump_config_to=parsed_args.dump_config_to,
     )
     logging.debug(f"Dynamo args: {dynamo_args}")
 
