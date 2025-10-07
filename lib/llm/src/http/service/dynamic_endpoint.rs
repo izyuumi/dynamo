@@ -65,13 +65,11 @@ async fn inner_dynamic_endpoint_handler(
         return Err((StatusCode::NOT_FOUND, "Endpoint not found"));
     }
 
-    let target_instances = instances
+    let mut target_clients: Vec<Client> = Vec::new();
+    for instance in instances
         .iter()
         .filter(|instance| instance.http_endpoint_path == Some(fmt_path.clone()))
-        .collect::<Vec<_>>();
-
-    let mut target_clients: Vec<Client> = Vec::new();
-    for instance in target_instances {
+    {
         let ns = drt
             .namespace(instance.namespace.clone())
             .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get namespace"))?;
