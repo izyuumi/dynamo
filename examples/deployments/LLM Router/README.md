@@ -187,7 +187,7 @@ The router supports two routing strategies:
 - **Complexity-Based Routing**: Routes based on complexity level (creativity, reasoning, domain knowledge, etc.)
 
 Example routing logic:
-- Simple tasks (classification, summarization) → Llama-3.1-8B (fast, efficient)  
+- Simple tasks (classification, summarization) → Llama-3.1-8B (fast, efficient)
 - Complex tasks (reasoning, creativity) → Llama-3.1-70B (powerful, detailed)
 - Conversational/creative tasks → Mixtral-8x22B (diverse responses)
 
