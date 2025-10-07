@@ -8,6 +8,7 @@ on:
     branches:
       - main
       - "pull-request/[0-9]+"
+      - release/*.*.*
 
 concurrency:
     group: ${{ github.workflow }}-build-test-${{ github.ref_name || github.run_id }}
@@ -37,9 +38,16 @@ jobs:
   #         echo '${{ toJson(needs) }}' | jq -e 'to_entries | map(.value.result) | all(. as $result | ["success", "skipped"] | any($result == .))'
 
   # vllm:
-  #   runs-on: gpu-l40-amd64
   #   needs: changed-files
   #   if: needs.changed-files.outputs.has_code_changes == 'true'
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       platform:
+  #         - { arch: amd64, runner: gpu-l40-amd64 }
+  #         - { arch: arm64, runner: cpu-arm-r8g-4xlarge }
+  #   name: vllm (${{ matrix.platform.arch }})
+  #   runs-on: ${{ matrix.platform.runner }}
   #   steps:
   #     - name: Checkout code
   #       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
@@ -60,7 +68,8 @@ jobs:
   #       with:
   #         local_image: ${{ steps.build-image.outputs.image_tag }}
   #         push_tag: ai-dynamo/dynamo:${{ github.sha }}-vllm-amd64
-  #         aws_push: 'true'
+  #         # OPS-1145: Switch aws_push to true
+  #         aws_push: 'false'
   #         azure_push: 'true'
   #         aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
   #         aws_default_region: us-west-2
@@ -74,9 +83,19 @@ jobs:
   #         pytest_marks: "e2e and vllm and gpu_1 and not slow"
 
   # sglang:
-  #   runs-on: gpu-l40-amd64
   #   needs: changed-files
   #   if: needs.changed-files.outputs.has_code_changes == 'true'
+  #   # OPS-1140: Uncomment this for sglang arm switch to wideep
+  #   # strategy:
+  #   #   fail-fast: false
+  #   #   matrix:
+  #   #     platform:
+  #   #       - { arch: amd64, runner: gpu-l40-amd64 }
+  #   #       - { arch: arm64, runner: cpu-arm-r8g-4xlarge }
+  #   # name: sglang (${{ matrix.platform.arch }})
+  #   # runs-on: ${{ matrix.platform.runner }}
+  #   # OPS-1140: Remove this runs-on line, replaced with the above line
+  #   runs-on: gpu-l40-amd64
   #   steps:
   #     - name: Checkout repository
   #       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
@@ -97,7 +116,10 @@ jobs:
   #       with:
   #         local_image: ${{ steps.build-image.outputs.image_tag }}
   #         push_tag: ai-dynamo/dynamo:${{ github.sha }}-sglang-amd64
-  #         aws_push: 'true'
+  #         # OPS-1140: Replace the above line with the uncommented below line
+  #         # push_tag: ai-dynamo/dynamo:${{ github.sha }}-sglang-${{ matrix.platform.arch }}
+  #         # OPS-1145: Switch aws_push to true
+  #         aws_push: 'false'
   #         azure_push: 'true'
   #         aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
   #         aws_default_region: us-west-2
@@ -111,9 +133,16 @@ jobs:
   #         pytest_marks: "e2e and sglang and gpu_1"
 
   # trtllm:
-  #   runs-on: gpu-l40-amd64
   #   needs: changed-files
   #   if: needs.changed-files.outputs.has_code_changes == 'true'
+  #   strategy:
+  #     fail-fast: false
+  #     matrix:
+  #       platform:
+  #         - { arch: amd64, runner: gpu-l40-amd64 }
+  #         - { arch: arm64, runner: cpu-arm-r8g-4xlarge }
+  #   name: trtllm (${{ matrix.platform.arch }})
+  #   runs-on: ${{ matrix.platform.runner }}
   #   steps:
   #     - name: Checkout code
   #       uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955  # v4.3.0
@@ -134,7 +163,8 @@ jobs:
   #       with:
   #         local_image: ${{ steps.build-image.outputs.image_tag }}
   #         push_tag: ai-dynamo/dynamo:${{ github.sha }}-trtllm-amd64
-  #         aws_push: 'true'
+  #         # OPS-1145: Switch aws_push to true
+  #         aws_push: 'false'
   #         azure_push: 'true'
   #         aws_account_id: ${{ secrets.AWS_ACCOUNT_ID }}
   #         aws_default_region: us-west-2
@@ -379,3 +409,32 @@ jobs:
         echo "Namespace $NAMESPACE deletion initiated, proceeding with cleanup..."
         kubectl delete namespace $NAMESPACE || true
         echo "Namespace $NAMESPACE completed."
+
+  upload-workflow-metrics:
+    name: Upload Workflow Metrics
+    runs-on: gitlab
+    if: always()  # Always run, even if other jobs fail
+    needs: [backend-status-check]  # Wait for the status check which waits for all build jobs
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+      - name: Upload Complete Workflow Metrics
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WORKFLOW_INDEX: ${{ secrets.WORKFLOW_INDEX }}
+          JOB_INDEX: ${{ secrets.JOB_INDEX }}
+          STEPS_INDEX: ${{ secrets.STEPS_INDEX }}
+        run: |
+          # Run the enhanced metrics upload script
+          python3 .github/workflows/upload_complete_workflow_metrics.py
