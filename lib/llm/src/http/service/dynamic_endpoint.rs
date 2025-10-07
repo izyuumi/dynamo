@@ -30,6 +30,13 @@ pub fn dynamic_endpoint_router(
     (docs, router)
 }
 
+/// Dynamic endpoint handler that discovers component instances from the discovery plane and fans out
+/// requests to all instances that registered the matching HTTP endpoint path.
+///
+/// Example: POST to `/get_model_info` discovers all instances with `http_endpoint_path = "/get_model_info"`,
+/// queries each one, and returns `{"responses": [instance1_result, instance2_result, ...]}`.
+///
+/// Returns 404 if no instances have registered the endpoint.
 async fn inner_dynamic_endpoint_handler(
     state: Arc<service_v2::State>,
     path: String,
