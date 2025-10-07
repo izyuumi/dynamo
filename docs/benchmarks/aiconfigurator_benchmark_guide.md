@@ -116,9 +116,11 @@ aiconfigurator cli \
   --system h200_sxm \
   --total_gpus 8 \
   --isl 4000 --osl 500 \
+  --ttft 600 --tpot 16.7 \
   --save_dir ./aiconf_save \
   --model_path Qwen/Qwen3-32B \
   --served_model_name Qwen/Qwen3-32B \
+  --generated_config_version 1.0.0rc6 \
   --k8s_use_model_cache false \
   --k8s_namespace $NAMESPACE_2 \
   --k8s_image nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.5.0 \
