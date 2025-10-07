@@ -9,6 +9,7 @@ from tests.utils.payloads import (
     CompletionPayload,
     EmbeddingPayload,
     MetricsPayload,
+    ModelInfoPayload,
 )
 
 # Common default text prompt used across tests
@@ -61,7 +62,6 @@ def completion_payload_default(
         expected_response=expected_response or ["AI"],
     )
 
-
 def metric_payload_default(
     min_num_requests: int,
     repeat_count: int = 1,
@@ -73,6 +73,19 @@ def metric_payload_default(
         expected_log=expected_log or [],
         expected_response=[],
         min_num_requests=min_num_requests,
+    )
+
+
+def model_info_payload_default(
+    repeat_count: int = 1,
+    expected_response: Optional[List[str]] = None,
+    expected_log: Optional[List[str]] = None,
+) -> ModelInfoPayload:
+    return ModelInfoPayload(
+        body={},
+        repeat_count=repeat_count,
+        expected_log=expected_log or [],
+        expected_response=expected_response or ["Model:"],
     )
 
 
