@@ -29,7 +29,6 @@ use tower_http::trace::TraceLayer;
 pub struct State {
     metrics: Arc<Metrics>,
     manager: Arc<ModelManager>,
-    distributed_runtime: Option<DistributedRuntime>,
     flags: StateFlags,
 }
 
@@ -74,7 +73,6 @@ impl State {
         Self {
             manager,
             metrics: Arc::new(Metrics::default()),
-            distributed_runtime: None,
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -84,19 +82,6 @@ impl State {
         }
     }
 
-    pub fn new_with_drt(manager: Arc<ModelManager>, drt: Option<DistributedRuntime>) -> Self {
-        Self {
-            manager,
-            metrics: Arc::new(Metrics::default()),
-            distributed_runtime: drt,
-            flags: StateFlags {
-                chat_endpoints_enabled: AtomicBool::new(false),
-                cmpl_endpoints_enabled: AtomicBool::new(false),
-                embeddings_endpoints_enabled: AtomicBool::new(false),
-                responses_endpoints_enabled: AtomicBool::new(false),
-            },
-        }
-    }
     /// Get the Prometheus [`Metrics`] object which tracks request counts and inflight requests
     pub fn metrics_clone(&self) -> Arc<Metrics> {
         self.metrics.clone()
@@ -108,10 +93,6 @@ impl State {
 
     pub fn manager_clone(&self) -> Arc<ModelManager> {
         self.manager.clone()
-    }
-
-    pub fn distributed_runtime(&self) -> Option<&DistributedRuntime> {
-        self.distributed_runtime.as_ref()
     }
 
     // TODO
@@ -294,7 +275,7 @@ impl HttpServiceConfigBuilder {
 
         let model_manager = Arc::new(ModelManager::new());
         let drt = config.distributed_runtime;
-        let state = Arc::new(State::new_with_drt(model_manager, drt));
+        let state = Arc::new(State::new(model_manager));
 
         state
             .flags
@@ -322,9 +303,9 @@ impl HttpServiceConfigBuilder {
         let mut routes = vec![
             metrics::router(registry, var(HTTP_SVC_METRICS_PATH_ENV).ok()),
             super::openai::list_models_router(state.clone(), var(HTTP_SVC_MODELS_PATH_ENV).ok()),
-            super::health::health_check_router(state.clone(), var(HTTP_SVC_HEALTH_PATH_ENV).ok()),
+            super::health::health_check_router(state.clone(), var(HTTP_SVC_HEALTH_PATH_ENV).ok(), drt.clone()),
             super::health::live_check_router(state.clone(), var(HTTP_SVC_LIVE_PATH_ENV).ok()),
-            super::dynamic_endpoint::dynamic_endpoint_router(state.clone(), None),
+            super::dynamic_endpoint::dynamic_endpoint_router(state.clone(), None, drt.clone()),
         ];
 
         let endpoint_routes =

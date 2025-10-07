@@ -4,28 +4,33 @@
 use super::{RouteDoc, service_v2};
 use crate::types::Annotated;
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     http::{Method, StatusCode},
     response::IntoResponse,
     routing::post,
 };
 use dynamo_runtime::component::Client;
 use dynamo_runtime::instances::list_all_instances;
-use dynamo_runtime::{pipeline::PushRouter, stream::StreamExt};
+use dynamo_runtime::{pipeline::PushRouter, stream::StreamExt, DistributedRuntime};
 use std::sync::Arc;
 
 pub fn dynamic_endpoint_router(
     state: Arc<service_v2::State>,
     path: Option<String>,
+    drt: Option<DistributedRuntime>,
 ) -> (Vec<RouteDoc>, Router) {
     let wildcard_path = "/{*path}";
     let path = path.unwrap_or_else(|| wildcard_path.to_string());
 
     let docs: Vec<RouteDoc> = vec![RouteDoc::new(Method::POST, &path)];
 
-    let router = Router::new()
+    let mut router = Router::new()
         .route(&path, post(dynamic_endpoint_handler))
         .with_state(state);
+
+    if let Some(drt) = drt {
+        router = router.layer(Extension(Arc::new(drt)));
+    }
 
     (docs, router)
 }
@@ -38,12 +43,9 @@ pub fn dynamic_endpoint_router(
 ///
 /// Returns 404 if no instances have registered the endpoint.
 async fn inner_dynamic_endpoint_handler(
-    state: Arc<service_v2::State>,
+    drt: Arc<DistributedRuntime>,
     path: String,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    let drt = state
-        .distributed_runtime()
-        .expect("Failed to get distributed runtime");
     let etcd_client = drt.etcd_client().ok_or((
         StatusCode::INTERNAL_SERVER_ERROR,
         "Failed to get etcd client",
@@ -113,10 +115,10 @@ async fn inner_dynamic_endpoint_handler(
 }
 
 async fn dynamic_endpoint_handler(
-    axum::extract::State(state): axum::extract::State<Arc<service_v2::State>>,
+    Extension(drt): Extension<Arc<DistributedRuntime>>,
     axum::extract::Path(path): axum::extract::Path<String>,
 ) -> impl IntoResponse {
-    inner_dynamic_endpoint_handler(state, path)
+    inner_dynamic_endpoint_handler(drt, path)
         .await
         .map_err(|(status_code, err_string)| {
             (
