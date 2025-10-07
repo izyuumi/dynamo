@@ -40,6 +40,7 @@ pub fn dynamic_endpoint_router(
 async fn inner_dynamic_endpoint_handler(
     state: Arc<service_v2::State>,
     path: String,
+    body: serde_json::Value,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
     let drt = state.distributed_runtime().ok_or((
         StatusCode::INTERNAL_SERVER_ERROR,
@@ -93,12 +94,14 @@ async fn inner_dynamic_endpoint_handler(
 
     let mut all_responses = Vec::new();
     for client in target_clients {
-        let router =
-            PushRouter::<(), Annotated<serde_json::Value>>::from_client(client, Default::default())
-                .await
-                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get router"))?;
+        let router = PushRouter::<serde_json::Value, Annotated<serde_json::Value>>::from_client(
+            client,
+            Default::default(),
+        )
+        .await
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get router"))?;
 
-        let mut stream = router.round_robin(().into()).await.map_err(|e| {
+        let mut stream = router.round_robin(body.clone().into()).await.map_err(|e| {
             tracing::error!("Failed to route: {:?}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to route")
         })?;
@@ -116,8 +119,10 @@ async fn inner_dynamic_endpoint_handler(
 async fn dynamic_endpoint_handler(
     axum::extract::State(state): axum::extract::State<Arc<service_v2::State>>,
     axum::extract::Path(path): axum::extract::Path<String>,
+    body: Option<Json<serde_json::Value>>,
 ) -> impl IntoResponse {
-    inner_dynamic_endpoint_handler(state, path)
+    let body = body.map(|Json(v)| v).unwrap_or(serde_json::json!({}));
+    inner_dynamic_endpoint_handler(state, path, body)
         .await
         .map_err(|(status_code, err_string)| {
             (
