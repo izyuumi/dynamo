@@ -91,6 +91,11 @@ type DynamoComponentDeploymentSharedSpec struct {
 	EnvFromSecret *string `json:"envFromSecret,omitempty"`
 	// VolumeMounts references PVCs defined at the top level for volumes to be mounted by the component.
 	VolumeMounts []VolumeMount `json:"volumeMounts,omitempty"`
+	// ModelRef references a DynamoModel resource that provides the model artifact for this component.
+	// When specified, the controller will wait for the model to be ready and automatically mount
+	// the model's PVC to the component.
+	// +kubebuilder:validation:Optional
+	ModelRef string `json:"modelRef,omitempty"`
 
 	// Ingress config to expose the component outside the cluster (or through a service mesh).
 	Ingress *IngressSpec `json:"ingress,omitempty"`
