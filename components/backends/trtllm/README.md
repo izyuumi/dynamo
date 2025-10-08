@@ -85,6 +85,20 @@ docker compose -f deploy/docker-compose.yml up -d
 # TensorRT-LLM uses git-lfs, which needs to be installed in advance.
 apt-get update && apt-get -y install git git-lfs
 
+# You need to login to NVIDIA NGC to pull the PyTorch NGC container during the build process.
+# If you do not have an NGC account, you can create one for free at https://ngc.nvidia.com/signin
+# Once you have an account, obtain your NGC API key from https://ngc.nvidia.com/setup/api-key
+
+# Login to NGC using Docker:
+docker login nvcr.io
+
+# When prompted for a username, enter your NGC email or "$oauthtoken" (without quotes).
+# When prompted for a password, enter your NGC API key.
+
+# Example:
+# Username: $oauthtoken
+# Password: <your NGC API key>
+
 # On an x86 machine:
 ./container/build.sh --framework trtllm
 
