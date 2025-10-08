@@ -39,11 +39,16 @@ async fn inner_dynamic_endpoint_handler(
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
     let fmt_path = format!("/{}", &path);
     let registry = state.dynamic_registry();
-    let target_clients = match registry
-        .expect("Dynamic registry not found")
-        .get_clients(&fmt_path)
-        .await
-    {
+    let registry = match registry {
+        Some(r) => r,
+        None => {
+            return Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Dynamic registry not found",
+            ));
+        }
+    };
+    let target_clients = match registry.get_clients(&fmt_path).await {
         Some(clients) if !clients.is_empty() => clients,
         _ => return Err((StatusCode::NOT_FOUND, "Endpoint not found")),
     };
