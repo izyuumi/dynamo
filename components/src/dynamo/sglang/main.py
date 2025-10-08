@@ -3,7 +3,6 @@
 
 import asyncio
 import functools
-import json
 import logging
 import signal
 import sys
@@ -11,8 +10,8 @@ import sys
 import sglang as sgl
 import uvloop
 
-from dynamo.llm import ModelInput, ModelType
 from dynamo.common.config_dump import dump_config, get_config_endpoint
+from dynamo.llm import ModelInput, ModelType
 from dynamo.runtime import DistributedRuntime, dynamo_worker
 from dynamo.runtime.logging import configure_dynamo_logging
 from dynamo.sglang.args import Config, DisaggregationMode, parse_args
@@ -187,6 +186,7 @@ async def init_embedding(runtime: DistributedRuntime, config: Config):
     await component.create_service()
 
     generate_endpoint = component.endpoint(dynamo_args.endpoint)
+    dump_config_endpoint = component.endpoint("dump_config")
 
     # publisher instantiates the metrics and kv event publishers
     publisher, metrics_task, metrics_labels = await setup_sgl_metrics(

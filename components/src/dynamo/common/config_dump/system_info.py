@@ -139,6 +139,7 @@ def get_gpu_info() -> Optional[Dict[str, Any]]:
 
     return None
 
+
 def get_package_info() -> Optional[Dict[str, Any]]:
     """
     Get package information.
