@@ -21,11 +21,11 @@
 mod openai;
 
 pub mod disconnect;
+pub mod dump_config;
 pub mod error;
 pub mod health;
 pub mod metrics;
 pub mod service_v2;
-pub mod dump_config;
 
 pub use axum;
 pub use metrics::Metrics;

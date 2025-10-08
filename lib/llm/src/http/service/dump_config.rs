@@ -207,7 +207,8 @@ async fn fetch_instance_config(
     if let Some(message_str) = message.as_str() {
         // The message is itself a json string
         tracing::warn!("message: {}", message_str);
-        let message_json = serde_json::from_str(message_str).map_err(|e| format!("Failed to parse message as json: {}", e))?;
+        let message_json = serde_json::from_str(message_str)
+            .map_err(|e| format!("Failed to parse message as json: {}", e))?;
         Ok(message_json)
     } else {
         Err(format!("message field is not a string {:?}", response))

@@ -111,12 +111,12 @@ def dump_config(dump_config_to: Optional[str], config: Any) -> None:
             logger.info(f"Dumped config to {dump_path.resolve()}")
         except (OSError, IOError):
             logger.exception(f"Failed to dump config to {dump_config_to}")
-            logger.info(f"CONFIG_DUMP: {config_dump_payload}")
+            logger.debug(f"CONFIG_DUMP: {config_dump_payload}")
         except Exception:
             logger.exception("Unexpected error dumping config")
-            logger.info(f"CONFIG_DUMP: {config_dump_payload}")
+            logger.debug(f"CONFIG_DUMP: {config_dump_payload}")
     else:
-        logger.info(f"CONFIG_DUMP: {config_dump_payload}")
+        logger.debug(f"CONFIG_DUMP: {config_dump_payload}")
 
 
 def get_config_dump(config: Any, extra_info: Optional[Dict[str, Any]] = None) -> str:

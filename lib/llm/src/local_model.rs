@@ -239,7 +239,8 @@ impl LocalModelBuilder {
                 router_config: self.router_config.take().unwrap_or_default(),
                 runtime_config: self.runtime_config.clone(),
                 namespace: self.namespace.clone(),
-                extremely_unsafe_do_not_use_in_prod_expose_dump_config: self.extremely_unsafe_do_not_use_in_prod_expose_dump_config,
+                extremely_unsafe_do_not_use_in_prod_expose_dump_config: self
+                    .extremely_unsafe_do_not_use_in_prod_expose_dump_config,
             });
         }
 
@@ -319,7 +320,8 @@ impl LocalModelBuilder {
             router_config: self.router_config.take().unwrap_or_default(),
             runtime_config: self.runtime_config.clone(),
             namespace: self.namespace.clone(),
-            extremely_unsafe_do_not_use_in_prod_expose_dump_config: self.extremely_unsafe_do_not_use_in_prod_expose_dump_config,
+            extremely_unsafe_do_not_use_in_prod_expose_dump_config: self
+                .extremely_unsafe_do_not_use_in_prod_expose_dump_config,
         })
     }
 }
@@ -392,7 +394,7 @@ impl LocalModel {
         self.namespace.as_deref()
     }
 
-    pub fn extremely_unsafe_do_not_use_in_prod_expose_dump_config(&self) -> bool{
+    pub fn extremely_unsafe_do_not_use_in_prod_expose_dump_config(&self) -> bool {
         self.extremely_unsafe_do_not_use_in_prod_expose_dump_config
     }
 
