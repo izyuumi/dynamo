@@ -441,7 +441,7 @@ def main():
     # This ensures PID 1 can receive and handle signals
     signal.signal(signal.SIGTERM, os_signal_handler)
     signal.signal(signal.SIGINT, os_signal_handler)
-    signal.signal(signal.SIGKILL, os_signal_handler)
+    # Note: SIGKILL cannot be caught or handled - it's enforced by the kernel
 
     try:
         # Run the asyncio worker
