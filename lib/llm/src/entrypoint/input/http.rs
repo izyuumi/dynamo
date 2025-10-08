@@ -85,7 +85,7 @@ pub async fn run(runtime: Runtime, engine_config: EngineConfig) -> anyhow::Resul
                     )
                     .await?;
 
-                    // Start dynamic HTTP endpoint watcher (instances prefix)
+                    // Start dynamic HTTP endpoint watcher
                     run_endpoint_watcher(etcd_client.clone(), Arc::new(http_service.clone()))
                         .await?;
                 }

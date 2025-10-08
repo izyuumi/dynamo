@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+//! Dynamic endpoint handler that fans out requests to all instances that registered
+//! the matching HTTP endpoint path, using the background registry.
+//! Returns 404 if no instances have registered the endpoint.
+
 use super::{RouteDoc, service_v2};
 use crate::types::Annotated;
 use axum::{
@@ -28,10 +32,6 @@ pub fn dynamic_endpoint_router(
     (docs, router)
 }
 
-/// Dynamic endpoint handler that fans out requests to all instances that registered
-/// the matching HTTP endpoint path, using the background registry.
-///
-/// Returns 404 if no instances have registered the endpoint.
 async fn inner_dynamic_endpoint_handler(
     state: Arc<service_v2::State>,
     path: String,
@@ -48,22 +48,25 @@ async fn inner_dynamic_endpoint_handler(
         _ => return Err((StatusCode::NOT_FOUND, "Endpoint not found")),
     };
 
+    // For now broadcast to all instances using direct routing
     let mut all_responses = Vec::new();
     for client in target_clients {
         let router = PushRouter::<serde_json::Value, Annotated<serde_json::Value>>::from_client(
-            client,
+            client.clone(),
             Default::default(),
         )
         .await
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get router"))?;
 
-        let mut stream = router.round_robin(body.clone().into()).await.map_err(|e| {
-            tracing::error!("Failed to route: {:?}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to route")
-        })?;
-
-        while let Some(resp) = stream.next().await {
-            all_responses.push(resp);
+        let ids = client.instance_ids_avail().clone();
+        for id in ids.iter() {
+            let mut stream = router.direct(body.clone().into(), *id).await.map_err(|e| {
+                tracing::error!("Failed to route (direct): {:?}", e);
+                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to route")
+            })?;
+            while let Some(resp) = stream.next().await {
+                all_responses.push(resp);
+            }
         }
     }
 

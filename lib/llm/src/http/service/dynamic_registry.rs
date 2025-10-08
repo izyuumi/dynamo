@@ -33,15 +33,13 @@ fn normalize_path(path: &str) -> String {
 
 #[derive(Default)]
 struct RegistryInner {
-    // path -> set of endpoint triples registered for that path
+    // Only 1 entry per EndpointId
     paths: HashMap<String, HashSet<EndpointId>>,
-    // endpoint -> constructed client (one per endpoint)
     endpoint_clients: HashMap<EndpointId, Client>,
-    // instance etcd key -> (path, endpoint) for delete bookkeeping
+    // Maps etcd key to its (path, endpoint) for easier deletes
     instance_index: HashMap<String, (String, EndpointId)>,
 }
 
-/// Watches instance records and exposes fast lookups from HTTP path -> Clients.
 #[derive(Clone)]
 pub struct DynamicEndpointWatcher {
     drt: Option<DistributedRuntime>,
@@ -56,7 +54,6 @@ impl DynamicEndpointWatcher {
         }
     }
 
-    /// Watch loop: consume etcd WatchEvents and update local state.
     pub async fn watch(&self, mut rx: Receiver<WatchEvent>) {
         while let Some(evt) = rx.recv().await {
             match evt {
@@ -148,7 +145,7 @@ impl DynamicEndpointWatcher {
         let set = guard.paths.entry(path.clone()).or_insert_with(HashSet::new);
         let inserted_new = set.insert(endpoint_id.clone());
         let need_client = inserted_new && !guard.endpoint_clients.contains_key(&endpoint_id);
-        drop(guard); // release before await
+        drop(guard);
 
         if need_client {
             if let Err(e) = self.ensure_client(&endpoint_id).await {
