@@ -55,8 +55,72 @@ sequenceDiagram
     end
 ```
 
+## Problems
+* KVs could be transferred layerwise, but aren't, and it's prefill's job to do so
+* No clean way to migrate requests from overloaded decode nodes, as decode
 
-## Detailed flow
+## Proposal
+
+What wo
+Here's some rust-like pseudocode for what we should do
+
+```rust
+
+/// decode takes an asynchronous stream of kv memory descriptors and a sender to notify on nixl when they are all copied in
+/// upon kv copy completion, we run decode and return a stream of tokens
+async fn decode(kvs: Stream<KVMemoryDescriptor>, prefill_dealloc_kvs_notification: NixlNotificationSender) -> Stream<Token> {
+    let block_ids = kvs.map(|kv| allocate_and_copy_into_block(kv)) //returns block_id
+        .join(); // do the correct thing and wait for all of them
+    prefill_dealloc_kvs_notification.notify().await;
+    run_decode(prev_token, block_ids).await  // also needs previous token somehow
+}
+
+
+/// prefill takes the input data and a nixl notification for when all kvs have been copied
+/// it then processes the input and incrementally sends block ids to be copied in
+async fn prefill(input: InputData, prefill_dealloc_kvs_notification: NixlNotificationReceiver) -> Stream<KVMemoryDescriptor> {
+    stream!{
+        let fwd_pass = forward_pass(input); // outputs kv block id on every layer
+        let block_ids = vec![];
+        while let Some(block_id) = fwd_pass.next().await {
+            block_ids.push(block_id);
+            yield get_memory_descriptor(block_id);
+        }
+        prefill_dealloc_kvs_notification.wait().await
+        dealloc_block_ids(block_id);
+    }
+}
+
+```
+
+This allows for overlap, and some extra nicities like the following:
+
+```rust
+
+
+/// Stop decoding the current request, with a handler that tells us when we can deallocate KVs
+/// Return a stream of the kv block ids that correspond to the request
+async fn freeze_decode(request_id: RequestId, dealloc_kvs_notification: NixlNotificationReceiver) -> Stream<KVMemoryDescriptor> {
+    stop_processing_request(request_id);
+    stream!{
+        for block_id in request_block_ids[request_id] {
+            yield get_memory_descriptor(block_id);
+        }
+        dealloc_kvs_notification.wait().await
+        dealloc_block_ids(request_block_ids[request_id])
+    }
+}
+
+```
+
+Moving a request from `decode_a` to `decode_b` then looks like
+```rust
+recv, send = nixl::make_notification();
+kv_stream = decode_a.freeze_decode(request_id, recv);
+new_token_stream = decode_b.decode(kv_stream, send);
+```
+
+## Detailed flow - current implementation
 
 ### Setup phase
 This happens once when prefill and decode workers first start up and establish connections.
