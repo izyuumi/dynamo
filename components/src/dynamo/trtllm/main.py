@@ -64,9 +64,6 @@ async def graceful_shutdown(runtime):
     logging.info("Received shutdown signal, shutting down DistributedRuntime")
     runtime.shutdown()
     logging.info("DistributedRuntime shutdown complete")
-    # Stop the event loop to allow process exit
-    loop = asyncio.get_running_loop()
-    loop.stop()
 
 
 # Global variables to store runtime and loop references for signal handling
@@ -247,9 +244,9 @@ async def init(runtime: DistributedRuntime, config: Config):
         else:
             kv_cache_config = arg_map["kv_cache_config"]
             if "event_buffer_max_size" not in kv_cache_config:
-                kv_cache_config["event_buffer_max_size"] = (
-                    DEFAULT_KV_EVENT_BUFFER_MAX_SIZE
-                )
+                kv_cache_config[
+                    "event_buffer_max_size"
+                ] = DEFAULT_KV_EVENT_BUFFER_MAX_SIZE
         arg_map["kv_cache_config"] = kv_cache_config
 
         # Only pytorch backend is supported for now to publish events and metrics.
