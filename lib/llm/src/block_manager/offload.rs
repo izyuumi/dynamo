@@ -91,7 +91,8 @@ pub struct OffloadManager<Locality: LocalityProvider, Metadata: BlockMetadata> {
     device_offload_tx: mpsc::UnboundedSender<OffloadRequest<DeviceStorage, Locality, Metadata>>,
     host_offload_tx: mpsc::UnboundedSender<OffloadRequest<PinnedStorage, Locality, Metadata>>,
     /// Queue of device-to-disk direct offloading requests (bypass CPU memory)
-    device_to_disk_offload_tx: mpsc::UnboundedSender<OffloadRequest<DeviceStorage, Locality, Metadata>>,
+    device_to_disk_offload_tx:
+        mpsc::UnboundedSender<OffloadRequest<DeviceStorage, Locality, Metadata>>,
 
     /// Queue of pending onboarding requests.
     host_onboard_tx:
@@ -284,7 +285,9 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
 
         // Device -> Disk direct offload (bypass CPU memory)
         if config.bypass_cpu_mem {
-            tracing::info!("G1->G3 direct offload enabled: Device will offload directly to Disk, bypassing Host memory (CPU cache disabled)");
+            tracing::info!(
+                "G1->G3 direct offload enabled: Device will offload directly to Disk, bypassing Host memory (CPU cache disabled)"
+            );
 
             let device_to_disk_task = OffloadManager::offload_worker(
                 this.device.clone(),
