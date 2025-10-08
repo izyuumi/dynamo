@@ -22,6 +22,7 @@ mod openai;
 
 pub mod disconnect;
 pub mod dynamic_endpoint;
+pub mod dynamic_registry;
 pub mod error;
 pub mod health;
 pub mod metrics;

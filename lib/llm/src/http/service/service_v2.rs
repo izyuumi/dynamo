@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use super::Metrics;
 use super::RouteDoc;
+use super::dynamic_registry::DynamicEndpointWatcher;
 use super::metrics;
 use crate::discovery::ModelManager;
 use crate::endpoint_type::EndpointType;
@@ -30,6 +31,7 @@ pub struct State {
     metrics: Arc<Metrics>,
     manager: Arc<ModelManager>,
     distributed_runtime: Option<DistributedRuntime>,
+    dynamic_registry: Option<DynamicEndpointWatcher>,
     flags: StateFlags,
 }
 
@@ -75,6 +77,7 @@ impl State {
             manager,
             metrics: Arc::new(Metrics::default()),
             distributed_runtime: None,
+            dynamic_registry: None,
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -88,7 +91,8 @@ impl State {
         Self {
             manager,
             metrics: Arc::new(Metrics::default()),
-            distributed_runtime: drt,
+            distributed_runtime: drt.clone(),
+            dynamic_registry: Some(DynamicEndpointWatcher::new(drt)),
             flags: StateFlags {
                 chat_endpoints_enabled: AtomicBool::new(false),
                 cmpl_endpoints_enabled: AtomicBool::new(false),
@@ -112,6 +116,10 @@ impl State {
 
     pub fn distributed_runtime(&self) -> Option<&DistributedRuntime> {
         self.distributed_runtime.as_ref()
+    }
+
+    pub fn dynamic_registry(&self) -> Option<DynamicEndpointWatcher> {
+        self.dynamic_registry.clone()
     }
 
     // TODO
@@ -314,6 +322,8 @@ impl HttpServiceConfigBuilder {
         state.metrics_clone().register(&registry)?;
 
         // Note: Metrics polling task will be started in run() method to have access to cancellation token
+
+        // Start dynamic endpoint watcher: rely on upstream to provide rx; handled in http.rs run()
 
         let mut router = axum::Router::new();
 

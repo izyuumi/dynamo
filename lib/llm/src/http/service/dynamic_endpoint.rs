@@ -9,8 +9,6 @@ use axum::{
     response::IntoResponse,
     routing::post,
 };
-use dynamo_runtime::component::Client;
-use dynamo_runtime::instances::list_all_instances;
 use dynamo_runtime::{pipeline::PushRouter, stream::StreamExt};
 use std::sync::Arc;
 
@@ -30,11 +28,8 @@ pub fn dynamic_endpoint_router(
     (docs, router)
 }
 
-/// Dynamic endpoint handler that discovers component instances from the discovery plane and fans out
-/// requests to all instances that registered the matching HTTP endpoint path.
-///
-/// Example: POST to `/get_model_info` discovers all instances with `http_endpoint_path = "/get_model_info"`,
-/// queries each one, and returns `{"responses": [instance1_result, instance2_result, ...]}`.
+/// Dynamic endpoint handler that fans out requests to all instances that registered
+/// the matching HTTP endpoint path, using the background registry.
 ///
 /// Returns 404 if no instances have registered the endpoint.
 async fn inner_dynamic_endpoint_handler(
@@ -42,53 +37,16 @@ async fn inner_dynamic_endpoint_handler(
     path: String,
     body: serde_json::Value,
 ) -> Result<impl IntoResponse, (StatusCode, &'static str)> {
-    let drt = state.distributed_runtime().ok_or((
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "Failed to get distributed runtime",
-    ))?;
-    let etcd_client = drt.etcd_client().ok_or((
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "Failed to get etcd client",
-    ))?;
-
-    let instances = list_all_instances(&etcd_client)
-        .await
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get instances"))?;
-
-    let dynamic_endpoints = instances
-        .iter()
-        .filter_map(|instance| instance.http_endpoint_path.clone())
-        .collect::<Vec<String>>();
-
     let fmt_path = format!("/{}", &path);
-    if !dynamic_endpoints.contains(&fmt_path) {
-        return Err((StatusCode::NOT_FOUND, "Endpoint not found"));
-    }
-
-    let mut target_clients: Vec<Client> = Vec::new();
-    for instance in instances
-        .iter()
-        .filter(|instance| instance.http_endpoint_path == Some(fmt_path.clone()))
+    let registry = state.dynamic_registry();
+    let target_clients = match registry
+        .expect("Dynamic registry not found")
+        .get_clients(&fmt_path)
+        .await
     {
-        let ns = drt
-            .namespace(instance.namespace.clone())
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get namespace"))?;
-        let c = ns
-            .component(instance.component.clone())
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get component"))?;
-        let ep = c.endpoint(instance.endpoint.clone());
-        let client = ep
-            .client()
-            .await
-            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get client"))?;
-        client.wait_for_instances().await.map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to wait for instances",
-            )
-        })?;
-        target_clients.push(client);
-    }
+        Some(clients) if !clients.is_empty() => clients,
+        _ => return Err((StatusCode::NOT_FOUND, "Endpoint not found")),
+    };
 
     let mut all_responses = Vec::new();
     for client in target_clients {
