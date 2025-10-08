@@ -35,13 +35,20 @@ docker compose -f deploy/docker-compose.yml up -d
 # launch the container
 ./container/run.sh --framework vllm -it --mount-workspace --use-nixl-gds
 
-# enable kv offloading to CPU memory
-# 4 means 4GB of CPU memory would be used
+# Configure KVBM cache tiers (choose one of the following options):
+
+# Option 1: CPU cache only (GPU -> CPU offloading)
 export DYN_KVBM_CPU_CACHE_GB=4
 
-# enable kv offloading to disk
-# 8 means 8GB of disk would be used
+# Option 2: Disk cache only (GPU -> Disk direct offloading, bypassing CPU)
 export DYN_KVBM_DISK_CACHE_GB=8
+
+# Option 3: Both CPU and Disk cache (GPU -> CPU -> Disk tiered offloading)
+export DYN_KVBM_CPU_CACHE_GB=4
+export DYN_KVBM_DISK_CACHE_GB=8
+
+# Note: You can also use DYN_KVBM_CPU_CACHE_OVERRIDE_NUM_BLOCKS or
+# DYN_KVBM_DISK_CACHE_OVERRIDE_NUM_BLOCKS to specify exact block counts instead of GB
 
 # [DYNAMO] start dynamo frontend
 python -m dynamo.frontend --http-port 8000 &
