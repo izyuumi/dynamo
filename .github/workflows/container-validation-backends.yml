@@ -384,31 +384,31 @@ jobs:
           echo "Test passed: Response matches expected format and content"
         fi
         exit $TEST_RESULT
-    - name: Cleanup
-      if: always()
-      timeout-minutes: 10
-      run: |
-        echo "${{ secrets.AZURE_AKS_CI_KUBECONFIG_B64 }}" | base64 -d > .kubeconfig
-        chmod 600 .kubeconfig
-        export KUBECONFIG=$(pwd)/.kubeconfig
-        kubectl config set-context --current --namespace=$NAMESPACE --kubeconfig "${KUBECONFIG}"
+    # - name: Cleanup
+    #   if: always()
+    #   timeout-minutes: 10
+    #   run: |
+    #     echo "${{ secrets.AZURE_AKS_CI_KUBECONFIG_B64 }}" | base64 -d > .kubeconfig
+    #     chmod 600 .kubeconfig
+    #     export KUBECONFIG=$(pwd)/.kubeconfig
+    #     kubectl config set-context --current --namespace=$NAMESPACE --kubeconfig "${KUBECONFIG}"
 
-        # For debugging purposes, list all the resources before we uninstall
-        kubectl get all
+    #     # For debugging purposes, list all the resources before we uninstall
+    #     kubectl get all
 
-        echo "Starting cleanup... after 30 seconds"
-        sleep 30
+    #     echo "Starting cleanup... after 30 seconds"
+    #     sleep 30
 
-        echo "Deleting all DynamoGraphDeployments in namespace $NAMESPACE..."
-        kubectl delete dynamographdeployments --all -n $NAMESPACE || true
+    #     echo "Deleting all DynamoGraphDeployments in namespace $NAMESPACE..."
+    #     kubectl delete dynamographdeployments --all -n $NAMESPACE || true
 
-        # Uninstall the helm chart
-        helm ls
-        helm uninstall dynamo-platform || true
+    #     # Uninstall the helm chart
+    #     helm ls
+    #     helm uninstall dynamo-platform || true
 
-        echo "Namespace $NAMESPACE deletion initiated, proceeding with cleanup..."
-        kubectl delete namespace $NAMESPACE || true
-        echo "Namespace $NAMESPACE completed."
+    #     echo "Namespace $NAMESPACE deletion initiated, proceeding with cleanup..."
+    #     kubectl delete namespace $NAMESPACE || true
+    #     echo "Namespace $NAMESPACE completed."
 
   # upload-workflow-metrics:
   #   name: Upload Workflow Metrics
