@@ -51,7 +51,7 @@ export DYNAMO_IMAGE=nvcr.io/nvidia/ai-dynamo/vllm-runtime:${DYNAMO_VERSION}
 kubectl create secret generic hf-token-secret \
   --from-literal=HF_TOKEN=${HF_TOKEN} -n ${NAMESPACE}
 
-cd "examples/deployments/LLM Router/"
+cd examples/deployments/LLMRouter/
 envsubst < frontend.yaml | kubectl apply -f - -n ${NAMESPACE}
 envsubst < agg.yaml | kubectl apply -f - -n ${NAMESPACE}
 
@@ -604,7 +604,7 @@ kubectl create secret generic hf-token-secret \
   -n ${NAMESPACE}
 
 # 2. Navigate to your LLM Router directory (where agg.yaml/disagg.yaml are located)
-cd "examples/deployments/LLM Router/"
+cd examples/deployments/LLMRouter/
 ```
 
 #### Shared Frontend Deployment
