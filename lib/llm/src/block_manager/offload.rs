@@ -76,6 +76,8 @@ pub struct OffloadManagerConfig {
     pub model_config: KvManagerModelConfig,
     /// If true, offload directly from device (G1) to disk (G3), bypassing host (G2)
     pub bypass_cpu_mem: bool,
+    /// Optional KVBM-level metrics for tracking offload/onboard operations
+    pub kvbm_metrics: Option<crate::block_manager::metrics_kvbm::KvbmMetrics>,
 }
 
 /// The offload manager handles all block transfers between different cache levels.
@@ -101,6 +103,8 @@ pub struct OffloadManager<Locality: LocalityProvider, Metadata: BlockMetadata> {
     tick: Arc<Mutex<u64>>,
     /// If true, offload directly from device (G1) to disk (G3), bypassing host (G2)
     bypass_cpu_mem: bool,
+    /// Optional KVBM-level metrics for tracking offload/onboard operations
+    kvbm_metrics: Option<crate::block_manager::metrics_kvbm::KvbmMetrics>,
 }
 
 impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
@@ -130,6 +134,7 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
             disk_onboard_tx,
             tick: Arc::new(Mutex::new(0)),
             bypass_cpu_mem: config.bypass_cpu_mem,
+            kvbm_metrics: config.kvbm_metrics.clone(),
         });
 
         let cuda_ctx = Cuda::device_or_create(0)?;
@@ -537,7 +542,7 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
         } else if let Some(host_block) =
             any_block.downcast_ref::<ImmutableBlock<PinnedStorage, Locality, Metadata>>()
         {
-            // The disk pool doesn't exist, so we can't offload to it.
+            // Host (G2) -> Disk (G3) offload
             if self.host_offload_tx.is_closed() {
                 return Ok(());
             }
@@ -547,6 +552,17 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                 sequence_hash: host_block.sequence_hash(),
                 key,
             };
+
+            tracing::debug!(
+                "Offloading host block {} to disk",
+                host_block.sequence_hash()
+            );
+
+            // Track metrics if available
+            if let Some(ref kvbm_metrics) = self.kvbm_metrics {
+                kvbm_metrics.offload_requests_h2d.inc();
+                kvbm_metrics.offload_blocks_h2d.inc();
+            }
 
             self.host_offload_tx.send(request).unwrap();
         }
@@ -830,6 +846,7 @@ mod tests {
             cancellation_token: CancellationToken::new(),
             model_config: minimal_config,
             bypass_cpu_mem: bypass_cpu_mem,
+            kvbm_metrics: None,
         };
 
         let manager = OffloadManager::new(

@@ -156,6 +156,7 @@ impl<R: LogicalResources, Metadata: BlockMetadata>
             cancellation_token: resources.cancellation_token.clone(),
             model_config,
             bypass_cpu_mem,
+            kvbm_metrics: resources.config.kvbm_metrics.clone(),
         };
 
         let offload_manager = OffloadManager::new(
@@ -275,6 +276,7 @@ impl<Metadata: BlockMetadata> KvBlockManagerState<locality::Local, Metadata> {
             cancellation_token: resources.cancellation_token.clone(),
             model_config,
             bypass_cpu_mem,
+            kvbm_metrics: resources.config.kvbm_metrics.clone(),
         };
 
         let offload_manager = OffloadManager::new(
