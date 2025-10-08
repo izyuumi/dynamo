@@ -90,15 +90,8 @@ sed -i "s/__version__ = \"\(.*\)\"/__version__ = \"\1+dev${COMMIT_VERSION}\"/" "
 echo "Updated version:"
 grep "__version__" "$VERSION_FILE"
 
-if [ "$ARCH" = "amd64" ]; then
-    # Need to build in the Triton Devel Image for NIXL support.
-    make -C docker tritondevel_build
-    make -C docker wheel_build DEVEL_IMAGE=tritondevel BUILD_WHEEL_OPTS='--extra-cmake-vars NIXL_ROOT=/opt/nvidia/nvda_nixl'
-else
-    # NIXL backend is not supported on arm64 for TensorRT-LLM.
-    # See here: https://github.com/NVIDIA/TensorRT-LLM/blob/main/docker/common/install_nixl.sh
-    make -C docker wheel_build
-fi
+make -C docker tritondevel_build
+make -C docker wheel_build DEVEL_IMAGE=tritondevel BUILD_WHEEL_OPTS='--extra-cmake-vars NIXL_ROOT=/opt/nvidia/nvda_nixl'
 
 # Copy the wheel to the host
 mkdir -p $OUTPUT_DIR
