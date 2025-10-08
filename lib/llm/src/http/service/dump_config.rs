@@ -36,15 +36,13 @@ impl MaybeError for DumpConfigResponse {
         if let Some(error_msg) = self.0.get("error") {
             return Some(anyhow!("Config dump error: {}", error_msg));
         }
-        if let Some(status) = self.0.get("status") {
-            if status == "error" {
-                let message = self
-                    .0
-                    .get("message")
-                    .and_then(|m| m.as_str())
-                    .unwrap_or("Unknown error");
-                return Some(anyhow!("Config dump failed: {}", message));
-            }
+        if let Some(status) = self.0.get("status") && status == "error" {
+            let message = self
+                .0
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error");
+            return Some(anyhow!("Config dump failed: {}", message));
         }
         None
     }

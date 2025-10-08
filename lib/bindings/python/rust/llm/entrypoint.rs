@@ -205,7 +205,8 @@ pub fn make_engine<'p>(
         .extra_engine_args(args.extra_engine_args.clone())
         .namespace(args.namespace.clone())
         .extremely_unsafe_do_not_use_in_prod_expose_dump_config(
-            args.extremely_unsafe_do_not_use_in_prod_expose_dump_config.unwrap_or(false),
+            args.extremely_unsafe_do_not_use_in_prod_expose_dump_config
+                .unwrap_or(false),
         );
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
         let local_model = builder.build().await.map_err(to_pyerr)?;
