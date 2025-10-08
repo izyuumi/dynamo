@@ -55,6 +55,7 @@ mod http;
 mod llm;
 mod parsers;
 mod planner;
+mod prometheus_metrics;
 mod prometheus_names;
 
 type JsonServerStreamingIngress =
@@ -185,6 +186,11 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     engine::add_to_module(m)?;
     parsers::add_to_module(m)?;
     prometheus_names::add_to_module(m)?;
+
+    m.add_class::<prometheus_metrics::PyRuntimeMetrics>()?;
+    let prometheus_metrics = PyModule::new(m.py(), "prometheus_metrics")?;
+    prometheus_metrics::add_to_module(&prometheus_metrics)?;
+    m.add_submodule(&prometheus_metrics)?;
 
     #[cfg(feature = "block-manager")]
     llm::block_manager::add_to_module(m)?;
@@ -594,7 +600,7 @@ fn bind_tcp_port(port: u16) -> std::io::Result<socket2::Socket> {
 }
 
 fn make_port_key(namespace: &str, node_ip: IpAddr, port: u16) -> anyhow::Result<String> {
-    Ok(format!("dyn://{namespace}/ports/{node_ip}/{port}"))
+    Ok(format!("v1/{namespace}/ports/{node_ip}/{port}"))
 }
 
 fn local_ip() -> Result<IpAddr, local_ip_address::Error> {
@@ -638,6 +644,12 @@ impl Component {
             let _ = builder.create().await.map_err(to_pyerr)?;
             Ok(())
         })
+    }
+
+    /// Get a RuntimeMetrics helper for creating Prometheus metrics
+    #[getter]
+    fn metrics(&self) -> prometheus_metrics::PyRuntimeMetrics {
+        prometheus_metrics::PyRuntimeMetrics::from_component(self.inner.clone())
     }
 }
 
@@ -722,6 +734,12 @@ impl Endpoint {
             .map(|l| l.id())
             .unwrap_or(0)
     }
+
+    /// Get a RuntimeMetrics helper for creating Prometheus metrics
+    #[getter]
+    fn metrics(&self) -> prometheus_metrics::PyRuntimeMetrics {
+        prometheus_metrics::PyRuntimeMetrics::from_endpoint(self.inner.clone())
+    }
 }
 
 #[pymethods]
@@ -732,6 +750,12 @@ impl Namespace {
             inner,
             event_loop: self.event_loop.clone(),
         })
+    }
+
+    /// Get a RuntimeMetrics helper for creating Prometheus metrics
+    #[getter]
+    fn metrics(&self) -> prometheus_metrics::PyRuntimeMetrics {
+        prometheus_metrics::PyRuntimeMetrics::from_namespace(self.inner.clone())
     }
 }
 
