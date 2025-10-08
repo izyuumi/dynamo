@@ -25,6 +25,7 @@ To learn what KVBM is, please check [here](https://docs.nvidia.com/dynamo/latest
 
 To use KVBM in vLLM, you can follow the steps below:
 
+### Docker Setup
 ```bash
 # start up etcd for KVBM leader/worker registration and discovery
 docker compose -f deploy/docker-compose.yml up -d
@@ -34,6 +35,7 @@ docker compose -f deploy/docker-compose.yml up -d
 
 # launch the container
 ./container/run.sh --framework vllm -it --mount-workspace --use-nixl-gds
+```
 
 # Configure KVBM cache tiers (choose one of the following options):
 
@@ -52,15 +54,30 @@ export DYN_KVBM_DISK_CACHE_GB=8
 
 # [DYNAMO] start dynamo frontend
 python -m dynamo.frontend --http-port 8000 &
+### Aggregated Serving with KVBM
+```bash
+cd $DYNAMO_HOME/components/backends/vllm
+./launch/agg_kvbm.sh
+```
 
-# [DYNAMO] serve an LLM model using KVBM with dynamo
-python -m dynamo.vllm \
-    --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B \
-    --connector kvbm &
+### Disaggregated Serving with KVBM (1P1D)
+```bash
+# NOTE: need at least 2 GPUs
+cd $DYNAMO_HOME/components/backends/vllm
+./launch/disagg_kvbm.sh
+```
+> [!NOTE]
+> To tune the size of CPU or disk cache, set `DYN_KVBM_CPU_CACHE_GB` and `DYN_KVBM_DISK_CACHE_GB` accordingly. We only set `DYN_KVBM_CPU_CACHE_GB=20` in both scripts above.
 
-# make a call to LLM
+> [!NOTE]
+> `DYN_KVBM_CPU_CACHE_GB` must be set and `DYN_KVBM_DISK_CACHE_GB` is optional.
+
+### Sample Request
+```bash
+# make a request to verify vLLM with KVBM is started up correctly
+# NOTE: change the model name if served with a different one
 curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   -d '{
-    "model": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "model": "Qwen/Qwen3-0.6B",
     "messages": [
     {
         "role": "user",
@@ -68,11 +85,11 @@ curl localhost:8000/v1/chat/completions   -H "Content-Type: application/json"   
     }
     ],
     "stream":false,
-    "max_tokens": 30
+    "max_tokens": 10
   }'
 ```
 
-Alternatively, can use "vllm serve" with KVBM by replacing the above two [DYNAMO] cmds with below:
+Alternatively, can use `vllm serve` directly to use KVBM for aggregated serving:
 ```bash
 vllm serve --kv-transfer-config '{"kv_connector":"DynamoConnector","kv_role":"kv_both", "kv_connector_module_path": "dynamo.llm.vllm_integration.connector"}' deepseek-ai/DeepSeek-R1-Distill-Llama-8B
 ```
