@@ -176,6 +176,9 @@ pub struct HttpServiceConfig {
     #[builder(default = "true")]
     enable_responses_endpoints: bool,
 
+    #[builder(default = "false")]
+    extremely_unsafe_do_not_use_in_prod_expose_dump_config: bool,
+
     #[builder(default = "None")]
     request_template: Option<RequestTemplate>,
 
@@ -335,8 +338,11 @@ impl HttpServiceConfigBuilder {
             super::openai::list_models_router(state.clone(), var(HTTP_SVC_MODELS_PATH_ENV).ok()),
             super::health::health_check_router(state.clone(), var(HTTP_SVC_HEALTH_PATH_ENV).ok()),
             super::health::live_check_router(state.clone(), var(HTTP_SVC_LIVE_PATH_ENV).ok()),
-            super::dump_config::dump_config_router(state.clone(), var(HTTP_SVC_DUMP_CONFIG_PATH_ENV).ok()),
         ];
+        if config.extremely_unsafe_do_not_use_in_prod_expose_dump_config {
+            tracing::warn!("Exposing unsafe dump_config endpoint. IF YOU SEE THIS IN PRODUCTION, YOU ARE DOING SOMETHING WRONG.");
+            routes.push(super::dump_config::dump_config_router(state.clone(), var(HTTP_SVC_DUMP_CONFIG_PATH_ENV).ok()));
+        }
 
         let endpoint_routes =
             HttpServiceConfigBuilder::get_endpoints_router(state.clone(), &config.request_template);
