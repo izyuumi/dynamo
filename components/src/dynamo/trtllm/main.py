@@ -64,6 +64,14 @@ async def graceful_shutdown(runtime):
     logging.info("Received shutdown signal, shutting down DistributedRuntime")
     runtime.shutdown()
     logging.info("DistributedRuntime shutdown complete")
+    # Stop the event loop to allow process exit
+    loop = asyncio.get_running_loop()
+    loop.stop()
+
+
+# Global variables to store runtime and loop references for signal handling
+_runtime_ref = None
+_loop_ref = None
 
 
 async def get_engine_runtime_config(
@@ -101,17 +109,29 @@ async def get_engine_runtime_config(
 
 @dynamo_worker(static=False)
 async def worker(runtime: DistributedRuntime):
-    # Set up signal handler for graceful shutdown
-    loop = asyncio.get_running_loop()
+    global _runtime_ref, _loop_ref
 
-    def signal_handler():
-        # Schedule the shutdown coroutine instead of calling it directly
-        asyncio.create_task(graceful_shutdown(runtime))
+    # Store references for signal handlers
+    _runtime_ref = runtime
+    _loop_ref = asyncio.get_running_loop()
 
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, signal_handler)
+    # Check if we're running as PID 1
+    is_pid_1 = os.getpid() == 1
 
-    logging.info("Signal handlers set up for graceful shutdown")
+    if not is_pid_1:
+        # Non-PID 1: Use asyncio signal handlers for better integration
+        def signal_handler():
+            # Schedule the shutdown coroutine instead of calling it directly
+            asyncio.create_task(graceful_shutdown(runtime))
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            _loop_ref.add_signal_handler(sig, signal_handler)
+
+        logging.info("Signal handlers set up for graceful shutdown (asyncio mode)")
+    else:
+        # PID 1: Keep OS handlers active (set up in main())
+        logging.info("Running as PID 1, using OS-level signal handlers")
+        # Note: OS-level handlers are set up in main() before this runs
 
     config = cmd_line_args()
     await init(runtime, config)
@@ -227,9 +247,9 @@ async def init(runtime: DistributedRuntime, config: Config):
         else:
             kv_cache_config = arg_map["kv_cache_config"]
             if "event_buffer_max_size" not in kv_cache_config:
-                kv_cache_config[
-                    "event_buffer_max_size"
-                ] = DEFAULT_KV_EVENT_BUFFER_MAX_SIZE
+                kv_cache_config["event_buffer_max_size"] = (
+                    DEFAULT_KV_EVENT_BUFFER_MAX_SIZE
+                )
         arg_map["kv_cache_config"] = kv_cache_config
 
         # Only pytorch backend is supported for now to publish events and metrics.
@@ -387,7 +407,52 @@ async def init(runtime: DistributedRuntime, config: Config):
 
 
 def main():
-    uvloop.run(worker())
+    # Set up OS-level signal handlers for PID 1 compatibility
+    def os_signal_handler(signum, frame):
+        """OS-level signal handler that works for PID 1"""
+        sig_name = signal.Signals(signum).name
+        logging.info(
+            f"Received OS signal {sig_name} ({signum}), initiating shutdown..."
+        )
+
+        # Try to do graceful shutdown if possible
+        if _runtime_ref and _loop_ref:
+            try:
+                # Schedule graceful shutdown in the event loop
+                if _loop_ref.is_running():
+                    logging.info("Attempting graceful shutdown via event loop...")
+                    # Use call_soon_threadsafe to schedule from signal handler
+                    _loop_ref.call_soon_threadsafe(
+                        lambda: asyncio.create_task(graceful_shutdown(_runtime_ref))
+                    )
+                    # graceful_shutdown will stop the loop when done
+                    return  # Let the event loop handle the rest
+            except Exception as e:
+                logging.warning(f"Could not schedule graceful shutdown: {e}")
+
+        # Fallback: immediate exit for PID 1
+        if os.getpid() == 1:
+            logging.info("Running as PID 1, forcing immediate exit")
+            # Try to flush logs before exiting
+            logging.shutdown()
+            sys.exit(0)
+        else:
+            # For non-PID 1, still exit but let asyncio handlers run if possible
+            sys.exit(0)
+
+    # Register OS handlers BEFORE starting asyncio
+    # This ensures PID 1 can receive and handle signals
+    signal.signal(signal.SIGTERM, os_signal_handler)
+    signal.signal(signal.SIGINT, os_signal_handler)
+    signal.signal(signal.SIGKILL, os_signal_handler)
+
+    try:
+        # Run the asyncio worker
+        uvloop.run(worker())
+    except (KeyboardInterrupt, SystemExit) as e:
+        logging.info(f"Main process interrupted: {e}")
+    finally:
+        logging.info("Main process cleanup complete")
 
 
 if __name__ == "__main__":
