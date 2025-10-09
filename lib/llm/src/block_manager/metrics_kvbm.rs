@@ -51,7 +51,8 @@ impl KvbmMetrics {
             .create_intcounter(
                 OFFLOAD_BLOCKS_H2D,
                 "The number of offload blocks from host to disk",
-                &[])
+                &[],
+            )
             .unwrap();
         let onboard_blocks_h2d = mr
             .create_intcounter(
