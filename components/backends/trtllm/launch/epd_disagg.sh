@@ -27,7 +27,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # run clear_namespace
-python3 utils/clear_namespace.py --namespace dynamo
+python3 -m dynamo.utils.clear_namespace --namespace dynamo
 
 # run frontend
 python3 -m dynamo.frontend --http-port 8000 &

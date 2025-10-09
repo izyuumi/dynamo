@@ -13,7 +13,7 @@ set -e
 trap 'echo Cleaning up...; kill 0' EXIT
 
 # run clear_namespace
-python3 utils/clear_namespace.py --namespace dynamo
+python3 -m dynamo.utils.clear_namespace --namespace dynamo
 
 # run frontend
 python3 -m dynamo.frontend --router-mode round-robin --http-port 8000 &
