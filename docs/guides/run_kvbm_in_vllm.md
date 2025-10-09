@@ -101,6 +101,7 @@ docker compose -f deploy/docker-compose.yml --profile metrics up -d
 DYN_KVBM_METRICS=true \
 python -m dynamo.vllm \
     --model Qwen/Qwen3-0.6B \
+    --enforce-eager \
     --connector kvbm &
 
 # optional if firewall blocks KVBM metrics ports to send prometheus metrics

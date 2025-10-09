@@ -491,6 +491,11 @@ impl<Locality: LocalityProvider + 'static, Metadata: BlockMetadata>
                 key,
             };
 
+            // Track metrics if available
+            if let Some(ref kvbm_metrics) = self.kvbm_metrics {
+                kvbm_metrics.offload_blocks_d2h.inc();
+            }
+
             self.device_offload_tx.send(request).unwrap();
         } else if let Some(host_block) =
             any_block.downcast_ref::<ImmutableBlock<PinnedStorage, Locality, Metadata>>()
