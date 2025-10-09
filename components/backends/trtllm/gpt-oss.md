@@ -139,7 +139,7 @@ cd /workspace/components/backends/trtllm
 cd /workspace/dynamo/components/backends/trtllm
 
 # Clear any existing deployments
-python3 -m dynamo.utils.clear_namespace.py --namespace dynamo
+python3 -m dynamo.utils.clear_namespace --namespace dynamo
 
 # Start frontend with round-robin routing
 python3 -m dynamo.frontend --router-mode round-robin --http-port 8000 &
