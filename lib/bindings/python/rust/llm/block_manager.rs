@@ -243,7 +243,10 @@ impl BlockManagerBuilder {
         self.disable_device_pool = yes;
         self
     }
-    pub fn kvbm_metrics(mut self, metrics: dynamo_llm::block_manager::metrics_kvbm::KvbmMetrics) -> Self {
+    pub fn kvbm_metrics(
+        mut self,
+        metrics: dynamo_llm::block_manager::metrics_kvbm::KvbmMetrics,
+    ) -> Self {
         self.kvbm_metrics = Some(metrics);
         self
     }
