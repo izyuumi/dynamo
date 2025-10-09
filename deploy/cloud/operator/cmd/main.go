@@ -245,7 +245,8 @@ func main() {
 			SecretName: mpiRunSecretName,
 		},
 		RBAC: commonController.RBACConfig{
-			PlannerClusterRoleName: plannerClusterRoleName,
+			PlannerClusterRoleName:       plannerClusterRoleName,
+			DGDRProfilingClusterRoleName: dgdrProfilingClusterRoleName,
 		},
 	}
 
