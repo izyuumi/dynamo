@@ -704,7 +704,7 @@ func (r *DynamoGraphDeploymentRequestReconciler) createProfilingJob(ctx context.
 
 	// Ensure profiling job RBAC exists in cluster-wide mode
 	if r.Config.RestrictedNamespace == "" {
-		if err := r.RBACMgr.EnsureServiceAccountWithRBAC(
+		if err := r.RBACManager.EnsureServiceAccountWithRBAC(
 			ctx,
 			dgdr.Namespace,
 			ServiceAccountProfilingJob,
@@ -1052,7 +1052,7 @@ func (r *DynamoGraphDeploymentRequestReconciler) cleanupProfilingResources(ctx c
 }
 
 // updateStateAndRequeue updates the DGDR state and requeues
-func (r *DynamoGraphDeploymentRequestReconciler) updateStateAndRequeue(ctx context.Context, dgdr *nvidiacomv1alpha1.DynamoGraphDeploymentRequest, state, message string) (ctrl.Result, error) {
+func (r *DynamoGraphDeploymentRequestReconciler) updateStateAndRequeue(ctx context.Context, dgdr *nvidiacomv1alpha1.DynamoGraphDeploymentRequest, state, _ string) (ctrl.Result, error) {
 	dgdr.Status.State = state
 	if err := r.Status().Update(ctx, dgdr); err != nil {
 		return ctrl.Result{}, err
