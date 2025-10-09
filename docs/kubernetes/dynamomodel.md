@@ -21,8 +21,6 @@ limitations under the License.
 
 `DynamoModel` is a Kubernetes Custom Resource Definition (CRD) that provides a high-level abstraction for managing model artifacts cached in PVCs within your cluster. It solves the critical problem of **model version drift** by ensuring all deployments and benchmarking jobs referencing the same `DynamoModel` use identical model artifacts.
 
-## Why DynamoModel?
-
 ### Problem Statement
 
 Without `DynamoModel`, teams face several challenges:
@@ -82,6 +80,54 @@ spec:
 ```
 
 Plug in custom downloaders or workflows (e.g., MLFlow or internal tools).
+
+## How It Works
+
+### User Flow
+
+1. **Create Model Definition:**
+   ```bash
+   kubectl apply -f components/models/qwen3-0.6b.yaml
+   ```
+
+2. **Watch Model Download:**
+   ```bash
+   kubectl get dynamomodel qwen3-0.6b -w
+   ```
+
+3. **Reference in Deployment:**
+   ```yaml
+   apiVersion: nvidia.com/v1alpha1
+   kind: DynamoGraphDeployment
+   spec:
+     modelRef: qwen3-0.6b
+     backendFramework: vllm
+   ```
+
+### Controller Flow
+
+1. **DGD Controller** checks if `modelRef` is specified
+2. Waits for `DynamoModel` to reach "Ready" state
+3. Passes model name to Grove/Component pod generation
+4. **Backend-specific logic** injects model arguments:
+   - vLLM: `--model Qwen/Qwen3-0.6B`
+   - SGLang/TRT-LLM: `--model-path Qwen/Qwen3-0.6B --served-model-name Qwen/Qwen3-0.6B`
+5. Sets `HF_HOME=/model-cache` so backends can resolve models
+6. Auto-mounts model PVC to `/model-cache`
+
+### Model Resolution
+
+When `HF_HOME=/model-cache` is set and backends use the canonical model name:
+```
+/model-cache/
+  models--Qwen--Qwen3-0.6B/
+    snapshots/
+      <hash>/
+        config.json
+        model-*.safetensors
+```
+
+Backends automatically resolve `Qwen/Qwen3-0.6B` → `/model-cache/models--Qwen--Qwen3-0.6B/snapshots/<hash>`
 
 ## Quick Start
 
@@ -150,17 +196,23 @@ metadata:
   name: vllm-disagg
   namespace: your-namespace
 spec:
+  modelRef: llama-3-70b-instruct-v1  # Reference at top-level
+  backendFramework: vllm
   services:
     VllmDecodeWorker:
-      modelRef: llama-3-70b-instruct-v1
       replicas: 2
-      # ... other configuration
+      resources:
+        limits:
+          nvidia.com/gpu: "2"
+      # Model arguments will be auto-injected by the controller
 ```
 
 The controller will automatically:
 1. Wait for the model to be ready
-2. Mount the model's PVC to the service
-3. Ensure all replicas use the same model artifact
+2. Inject the appropriate model arguments for your backend
+3. Mount the model's PVC to `/model-cache`
+4. Set `HF_HOME=/model-cache` for model resolution
+5. Ensure all replicas use the same model artifact
 
 ## API Reference
 
