@@ -15,6 +15,9 @@ from dynamo.runtime import DistributedRuntime
 class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
     def __init__(self, llm_args: TorchLlmArgs):
         super().__init__(llm_args)
+        
+        # TODO: turn `enable_timing=False` when ready to check in. `True` is for debugging only.
+        self._forward_pass_event = torch.cuda.Event(enable_timing=True, interprocess=False)
 
         self.drt = DistributedRuntime.detached()
 
@@ -23,6 +26,9 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
 
         self._connector = RustKvConnectorWorker(self.drt, str(self.rank))
 
+    def register_forward_pass_event(self) -> torch.cuda.Event:
+        return self._forward_pass_event
+    
     def register_kv_caches(self, kv_cache_tensor: torch.Tensor):
         """
         Register the KV cache tensors to the worker.
