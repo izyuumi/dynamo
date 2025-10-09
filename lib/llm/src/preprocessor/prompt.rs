@@ -76,6 +76,14 @@ pub trait OAIChatLikeRequest {
     fn extract_text(&self) -> Option<TextInput> {
         None
     }
+
+    /// Extract multimodal content (images, videos) from the request
+    /// Returns None if no multimodal content is present
+    fn extract_multimodal_content(
+        &self,
+    ) -> Option<Vec<crate::protocols::common::preprocessor::MultiModalContentItem>> {
+        None
+    }
 }
 
 pub trait OAIPromptFormatter: Send + Sync + 'static {

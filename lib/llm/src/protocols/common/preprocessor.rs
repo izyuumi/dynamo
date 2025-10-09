@@ -8,6 +8,21 @@ use super::{OutputOptions, SamplingOptions, StopConditions};
 use crate::kv_router::RouterConfigOverride;
 use crate::protocols::TokenIdType;
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum MultiModalContentType {
+    ImageUrl,
+    VideoUrl,
+    AudioUrl,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MultiModalContentItem {
+    // content type can be image_url, video_url
+    pub content_type: MultiModalContentType,
+    // data is the actual data for the content type
+    pub data: serde_json::Value,
+}
+
 /// [`PreprocessedRequest`] is the internal representation of an LLM request. The [`dynamo.llm-preprocessor`]
 /// crate is responsible for converting request from the public APIs to this internal representation.
 #[derive(Serialize, Deserialize, Debug, Clone, Builder)]
@@ -69,6 +84,11 @@ pub struct PreprocessedRequest {
     #[builder(default)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extra_args: Option<serde_json::Value>,
+
+    /// Multimodal data from original request (image_urls, video_urls, audio_urls)
+    #[builder(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multimodal_data: Option<Vec<MultiModalContentItem>>,
 }
 
 impl PreprocessedRequest {

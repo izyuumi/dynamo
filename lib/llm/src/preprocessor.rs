@@ -217,6 +217,8 @@ impl OpenAIPreprocessor {
         if let Some(nvext) = request.nvext() {
             builder.backend_instance_id(nvext.backend_instance_id);
         }
+        // Extract multimodal content (images, videos) if present
+        builder.multimodal_data(request.extract_multimodal_content());
 
         Ok(builder)
     }

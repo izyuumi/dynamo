@@ -5,12 +5,16 @@ use super::*;
 
 use minijinja::{context, value::Value};
 
+use crate::preprocessor::prompt::{PromptInput, TextInput, TokenInput};
+use crate::protocols::common::preprocessor::{MultiModalContentItem, MultiModalContentType};
 use crate::protocols::openai::{
     chat_completions::NvCreateChatCompletionRequest, completions::NvCreateCompletionRequest,
 };
+use dynamo_async_openai::types::{
+    ChatCompletionRequestMessage, ChatCompletionRequestUserMessageContent,
+    ChatCompletionRequestUserMessageContentPart,
+};
 use tracing;
-
-use crate::preprocessor::prompt::{PromptInput, TextInput, TokenInput};
 
 fn may_be_fix_tool_schema(tools: serde_json::Value) -> Option<Value> {
     // No need to validate or enforce other schema checks as the basic Named function schema is already validated while creating the request.
@@ -183,6 +187,67 @@ impl OAIChatLikeRequest for NvCreateChatCompletionRequest {
 
     fn chat_template_args(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         self.chat_template_args.as_ref()
+    }
+
+    fn extract_multimodal_content(&self) -> Option<Vec<MultiModalContentItem>> {
+        // Takes OpenAI ChatCompletionRequestMessages and extracts image_urls and video_urls if present
+        // Only works if messages are in the Array format as the array format only supports image_urls and video_urls
+        // Returns Vec<MultiModalContentItem> if multimodal content is present, None otherwise
+        let mut content_items = Vec::new();
+
+        // Iterate through all messages to find multimodal content
+        for message in &self.inner.messages {
+            if let ChatCompletionRequestMessage::User(user_msg) = message
+                && let ChatCompletionRequestUserMessageContent::Array(parts) = &user_msg.content
+            {
+                for part in parts {
+                    match part {
+                        ChatCompletionRequestUserMessageContentPart::ImageUrl(img) => {
+                            // Serialize the image_url data to JSON
+                            if let core::result::Result::Ok(data) =
+                                serde_json::to_value(&img.image_url)
+                            {
+                                content_items.push(MultiModalContentItem {
+                                    content_type: MultiModalContentType::ImageUrl,
+                                    data,
+                                });
+                            }
+                        }
+                        ChatCompletionRequestUserMessageContentPart::VideoUrl(vid) => {
+                            // Serialize the video_url data to JSON
+                            if let core::result::Result::Ok(data) =
+                                serde_json::to_value(&vid.video_url)
+                            {
+                                content_items.push(MultiModalContentItem {
+                                    content_type: MultiModalContentType::VideoUrl,
+                                    data,
+                                });
+                            }
+                        }
+                        ChatCompletionRequestUserMessageContentPart::AudioUrl(aud) => {
+                            // Serialize the audio_url data to JSON
+                            if let core::result::Result::Ok(data) =
+                                serde_json::to_value(&aud.audio_url)
+                            {
+                                content_items.push(MultiModalContentItem {
+                                    content_type: MultiModalContentType::AudioUrl,
+                                    data,
+                                });
+                            }
+                        }
+                        _ => {
+                            // Skip text, and   other content types
+                        }
+                    }
+                }
+            }
+        }
+
+        if content_items.is_empty() {
+            None
+        } else {
+            Some(content_items)
+        }
     }
 }
 
@@ -638,5 +703,156 @@ mod tests {
         // Unknown types mixed with text should preserve array
         assert!(messages[0]["content"].is_array());
         assert_eq!(messages[0]["content"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_extract_multimodal_content_none() {
+        // Test with text-only messages (no multimodal content)
+        let json_str = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "Hello, how are you?"
+                }
+            ]
+        }"#;
+
+        let request: NvCreateChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+        let multimodal = request.extract_multimodal_content();
+        assert!(multimodal.is_none());
+
+        // Test with array messages and no multimodal content
+        let json_str = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Hello, how are you?"}
+                    ]
+                }
+            ]
+        }"#;
+
+        let request: NvCreateChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+        let multimodal = request.extract_multimodal_content();
+        assert!(multimodal.is_none());
+    }
+
+    #[test]
+    fn test_extract_multimodal_content_single_content() {
+        // Test with single image URL
+        let json_str = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is in this image?"},
+                        {"type": "image_url", "image_url": {"url": "https://example.com/cat.jpg"}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let request: NvCreateChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+        let multimodal = request.extract_multimodal_content();
+        assert!(multimodal.is_some());
+        let items = multimodal.unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(matches!(
+            items[0].content_type,
+            MultiModalContentType::ImageUrl
+        ));
+        assert_eq!(items[0].data["url"], "https://example.com/cat.jpg");
+
+        // Test with single audio URL
+        let json_str = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is in this audio?"},
+                        {"type": "audio_url", "audio_url": {"url": "https://example.com/audio.mp3"}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let request: NvCreateChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+        let multimodal = request.extract_multimodal_content();
+        assert!(multimodal.is_some());
+        let items = multimodal.unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(matches!(
+            items[0].content_type,
+            MultiModalContentType::AudioUrl
+        ));
+        assert_eq!(items[0].data["url"], "https://example.com/audio.mp3");
+
+        // Test with single video URL
+        let json_str = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is happening in this video?"},
+                        {"type": "video_url", "video_url": {"url": "https://example.com/video.mp4"}}
+                    ]
+                }
+            ]
+        }"#;
+
+        let request: NvCreateChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+        let multimodal = request.extract_multimodal_content();
+        assert!(multimodal.is_some());
+        let items = multimodal.unwrap();
+        assert_eq!(items.len(), 1);
+        assert!(matches!(
+            items[0].content_type,
+            MultiModalContentType::VideoUrl
+        ));
+        assert_eq!(items[0].data["url"], "https://example.com/video.mp4");
+    }
+
+    #[test]
+    fn test_extract_multimodal_content_multiple_images() {
+        // Test with multiple images
+        let json_str = r#"{
+            "model": "gpt-4o",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Compare these images:"},
+                        {"type": "image_url", "image_url": {"url": "https://example.com/img1.jpg", "detail": "high"}},
+                        {"type": "image_url", "image_url": {"url": "https://example.com/img2.jpg", "detail": "low"}},
+                        {"type": "text", "text": "What are the differences?"}
+                    ]
+                }
+            ]
+        }"#;
+
+        let request: NvCreateChatCompletionRequest = serde_json::from_str(json_str).unwrap();
+        let multimodal = request.extract_multimodal_content();
+
+        assert!(multimodal.is_some());
+        let items = multimodal.unwrap();
+        assert_eq!(items.len(), 2);
+        assert!(matches!(
+            items[0].content_type,
+            MultiModalContentType::ImageUrl
+        ));
+        assert!(matches!(
+            items[1].content_type,
+            MultiModalContentType::ImageUrl
+        ));
+        assert_eq!(items[0].data["url"], "https://example.com/img1.jpg");
+        assert_eq!(items[1].data["url"], "https://example.com/img2.jpg");
+        assert_eq!(items[0].data["detail"], "high");
+        assert_eq!(items[1].data["detail"], "low");
     }
 }
