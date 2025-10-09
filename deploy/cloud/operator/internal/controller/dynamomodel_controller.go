@@ -359,14 +359,18 @@ func (r *DynamoModelReconciler) generateDownloadScript(dynamoModel *nvidiacomv1a
 
 	// Determine the download method based on the source URL prefix
 	if strings.HasPrefix(sourceURL, "hf://") {
-		// HuggingFace download
-		modelName := strings.TrimPrefix(sourceURL, "hf://")
-		script := `
+		// HuggingFace download using modern 'hf download' command
+		// Build revision flag if version is specified
+		revisionFlag := ""
+		if dynamoModel.Spec.Version != "" {
+			revisionFlag = fmt.Sprintf("--revision $MODEL_REVISION")
+		}
+
+		script := fmt.Sprintf(`
 set -eux
 pip install --no-cache-dir huggingface_hub hf_transfer
-export HF_HUB_ENABLE_HF_TRANSFER=1
-huggingface-cli download $MODEL_NAME --cache-dir /model-cache
-`
+hf download $MODEL_NAME %s --exclude "original/*" --exclude "metal/*"
+`, revisionFlag)
 		return script
 	} else if strings.HasPrefix(sourceURL, "s3://") {
 		// S3 download
@@ -402,6 +406,14 @@ func (r *DynamoModelReconciler) generateEnvVars(dynamoModel *nvidiacomv1alpha1.D
 			Name:  "SOURCE_URL",
 			Value: dynamoModel.Spec.SourceURL,
 		},
+		{
+			Name:  "HF_HOME",
+			Value: "/model-cache",
+		},
+		{
+			Name:  "HF_HUB_ENABLE_HF_TRANSFER",
+			Value: "1",
+		},
 	}
 
 	// Add model name for HuggingFace downloads
@@ -413,10 +425,10 @@ func (r *DynamoModelReconciler) generateEnvVars(dynamoModel *nvidiacomv1alpha1.D
 		})
 	}
 
-	// Add version if specified
+	// Add version/revision if specified
 	if dynamoModel.Spec.Version != "" {
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  "MODEL_VERSION",
+			Name:  "MODEL_REVISION",
 			Value: dynamoModel.Spec.Version,
 		})
 	}
@@ -450,4 +462,3 @@ func (r *DynamoModelReconciler) Cleanup(ctx context.Context, obj client.Object) 
 func (r *DynamoModelReconciler) GetFinalizerName() string {
 	return dynamoModelFinalizerName
 }
-

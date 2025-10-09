@@ -541,22 +541,11 @@ func (r *DynamoGraphDeploymentReconciler) checkModelReferences(ctx context.Conte
 	logger := log.FromContext(ctx)
 	notReadyModels := []string{}
 
-	// Collect all model references from services
-	modelRefs := make(map[string]bool)
-	for serviceName, serviceSpec := range dynamoDeployment.Spec.Services {
-		if serviceSpec != nil && serviceSpec.ModelRef != "" {
-			modelRefs[serviceSpec.ModelRef] = true
-			logger.Info("Found model reference", "service", serviceName, "modelRef", serviceSpec.ModelRef)
-		}
-	}
+	// Check top-level modelRef
+	if dynamoDeployment.Spec.ModelRef != "" {
+		modelRef := dynamoDeployment.Spec.ModelRef
+		logger.Info("Found top-level model reference", "modelRef", modelRef)
 
-	// If no model references, return true
-	if len(modelRefs) == 0 {
-		return true, notReadyModels, nil
-	}
-
-	// Check each referenced model
-	for modelRef := range modelRefs {
 		model := &nvidiacomv1alpha1.DynamoModel{}
 		err := r.Get(ctx, types.NamespacedName{
 			Name:      modelRef,
@@ -566,7 +555,7 @@ func (r *DynamoGraphDeploymentReconciler) checkModelReferences(ctx context.Conte
 		if err != nil {
 			if errors.IsNotFound(err) {
 				logger.Error(err, "Referenced model not found", "modelRef", modelRef)
-				return false, append(notReadyModels, modelRef), fmt.Errorf("model %s not found", modelRef)
+				return false, []string{modelRef}, fmt.Errorf("model %s not found", modelRef)
 			}
 			logger.Error(err, "Failed to get model", "modelRef", modelRef)
 			return false, notReadyModels, err
