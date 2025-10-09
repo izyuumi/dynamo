@@ -34,7 +34,7 @@ spec:
           echo "✅ Model '$TARGET_MODEL' is now available!"
           curl -s "http://$ENDPOINT/v1/models" | jq .
           # now run the benchmark
-          export ARTIFACT_DIR="/tmp/genai"
+          export ARTIFACT_DIR="/tmp/aiperf"
           mkdir -p "$ARTIFACT_DIR"
           echo "Running benchmark..."
           export COLUMNS=200
@@ -55,8 +55,7 @@ spec:
             --extra-inputs "{\"nvext\":{\"ignore_eos\":true}}" \
             --random-seed 1418186270 \
             --artifact-dir $ARTIFACT_DIR \
-            --num-dataset-entries=3000 -- \
-            --max-threads 64
+            --num-dataset-entries=3000
           echo "----------------json----------------"
           PERF_JSON=$(find $ARTIFACT_DIR -name profile_export_aiperf.json)
           cat $PERF_JSON | jq .
