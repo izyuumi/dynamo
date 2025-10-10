@@ -57,8 +57,13 @@ use inactive::InactiveBlockPool;
 #[derive(Builder, Dissolve)]
 #[builder(pattern = "owned", build_fn(private, name = "build_internal"))]
 pub struct ManagedBlockPoolArgs<S: Storage, L: LocalityProvider, M: BlockMetadata> {
-    #[builder(default = "NullEventManager::new()")]
-    event_manager: Arc<dyn EventManager>,
+    /// Event manager for publishing block registration and removal events.
+    /// 
+    /// **Defaults to `DynamoEventManager`** which logs KV cache events (STORE/REMOVE).
+    /// 
+    /// To disable event logging, explicitly provide `NullEventManager::new()`.
+    #[builder(default = "None", setter(strip_option))]
+    event_manager: Option<Arc<dyn EventManager>>,
 
     #[builder(default = "CancellationToken::new()")]
     cancel_token: CancellationToken,
@@ -80,13 +85,24 @@ impl<S: Storage, L: LocalityProvider, M: BlockMetadata> ManagedBlockPoolArgsBuil
     pub fn build(self) -> anyhow::Result<ManagedBlockPool<S, L, M>> {
         let args = self.build_internal()?;
         let (
-            event_manager,
+            event_manager_opt,
             cancel_token,
             blocks,
             global_registry,
             async_runtime,
             default_duplication_setting,
         ) = args.dissolve();
+
+        // Determine which event manager to use:
+        // 1. If event_manager is explicitly provided, use it (allows overriding)
+        // 2. Otherwise, use DynamoEventManager by default (logs events)
+        let event_manager = if let Some(event_manager) = event_manager_opt {
+            tracing::info!("using explicitly provided event manager for block pool");
+            event_manager
+        } else {
+            tracing::info!("using DynamoEventManager for block pool (logs KV cache events)");
+            crate::block_manager::events::DynamoEventManager::new()
+        };
 
         tracing::info!("building block pool");
         let pool = ManagedBlockPool::new(

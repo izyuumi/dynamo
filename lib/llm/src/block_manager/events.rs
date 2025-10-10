@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+#[cfg(test)]
+mod dynamo_integration_test;
+
 use std::sync::Arc;
 
 use super::block::registry::RegistrationHandle;
@@ -139,6 +142,105 @@ impl EventPublisher for NullEventManager {
 
 impl EventReleaseManager for NullEventManager {
     fn block_release(&self, _registration_handle: &RegistrationHandle) {}
+}
+
+/// Event manager that emits KV cache events to the router
+pub struct DynamoEventManager {
+    event_id_counter: std::sync::atomic::AtomicU64,
+}
+
+impl DynamoEventManager {
+    /// Create a new DynamoEventManager
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            event_id_counter: std::sync::atomic::AtomicU64::new(0),
+        })
+    }
+
+    fn next_event_id(&self) -> u64 {
+        self.event_id_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl std::fmt::Debug for DynamoEventManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "DynamoEventManager")
+    }
+}
+
+impl EventManager for DynamoEventManager {}
+
+impl EventPublisher for DynamoEventManager {
+    fn publish(&self, handles: Vec<Arc<RegistrationHandle>>) {
+        use crate::kv_router::protocols::{
+            ExternalSequenceBlockHash, KvCacheEvent, KvCacheEventData, KvCacheStoreData,
+            KvCacheStoredBlockData, LocalBlockHash,
+        };
+
+        if handles.is_empty() {
+            return;
+        }
+
+        let parent_hash = handles
+            .first()
+            .and_then(|h| h.parent_sequence_hash())
+            .map(|hash| ExternalSequenceBlockHash(hash));
+
+        let blocks: Vec<KvCacheStoredBlockData> = handles
+            .iter()
+            .map(|handle| KvCacheStoredBlockData {
+                block_hash: ExternalSequenceBlockHash(handle.sequence_hash()),
+                tokens_hash: LocalBlockHash(handle.block_hash()),
+            })
+            .collect();
+
+        let num_blocks = blocks.len();
+
+        let store_data = KvCacheStoreData {
+            parent_hash,
+            blocks,
+        };
+
+        let event = KvCacheEvent {
+            event_id: self.next_event_id(),
+            data: KvCacheEventData::Stored(store_data.clone()),
+        };
+
+        tracing::info!(
+            event_id = event.event_id,
+            parent_hash = ?parent_hash,
+            num_blocks = num_blocks,
+            "📦 KV_CACHE_STORE: {} block(s) registered",
+            num_blocks,
+        );
+    }
+}
+
+impl EventReleaseManager for DynamoEventManager {
+    fn block_release(&self, registration_handle: &RegistrationHandle) {
+        use crate::kv_router::protocols::{
+            ExternalSequenceBlockHash, KvCacheEvent, KvCacheEventData, KvCacheRemoveData,
+        };
+
+        let sequence_hash = registration_handle.sequence_hash();
+
+        let remove_data = KvCacheRemoveData {
+            block_hashes: vec![ExternalSequenceBlockHash(sequence_hash)],
+        };
+
+        let event = KvCacheEvent {
+            event_id: self.next_event_id(),
+            data: KvCacheEventData::Removed(remove_data),
+        };
+
+        tracing::info!(
+            event_id = event.event_id,
+            sequence_hash = sequence_hash,
+            "🗑️  KV_CACHE_REMOVE: seq_hash={}",
+            sequence_hash,
+        );
+    }
 }
 
 #[cfg(test)]
