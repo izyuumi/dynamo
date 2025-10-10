@@ -91,40 +91,62 @@ echo "  Log directory: $LOG_DIR"
 echo "  Model name: $MODEL"
 echo "  Served model name: $SERVED_MODEL_NAME"
 echo "  Is prefill worker: $IS_PREFILL_WORKER"
-trap 'echo Cleaning up...; kill 0' EXIT
+
+cleanup() {
+    echo "Cleaning up..."
+    set +e
+    # Terminate background jobs started by this script
+    jobs -p | xargs -r kill 2>/dev/null || true
+    # Also terminate any direct child processes of this script
+    pkill -P $$ 2>/dev/null || true
+    # Give processes a moment to exit gracefully, then force kill leftovers
+    sleep 1
+    jobs -p | xargs -r kill -9 2>/dev/null || true
+}
+
+trap 'cleanup' EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
 
 # run ingress if it's node 0 and is not a prefill worker
-if [ "$NODE_RANK" -eq 0 ] && [ "$IS_PREFILL_WORKER" = "false" ]; then
-    DYN_LOG=debug python -m dynamo.frontend --router-mode kv --http-port=8000 2>&1 | tee $LOG_DIR/dsr1_dep_ingress.log &
-fi
+# if [ "$NODE_RANK" -eq 0 ] && [ "$IS_PREFILL_WORKER" = "false" ]; then
+#     DYN_LOG=debug python -m dynamo.frontend --router-mode kv --http-port=8000 2>&1 | tee $LOG_DIR/dsr1_dep_ingress.log &
+# fi
 
 mkdir -p $LOG_DIR
 
 # add is-prefill-worker flag if it's a prefill worker
 IS_PREFILL_WORKER_FLAG=""
+VLLM_ALL2ALL_BACKEND="deepep_low_latency" # this kernel is better for decode workers
 if [ "$IS_PREFILL_WORKER" = "true" ]; then
     IS_PREFILL_WORKER_FLAG="--is-prefill-worker"
+    VLLM_ALL2ALL_BACKEND="deepep_high_throughput" # this kernel is better for prefill workers
+    LOGFILE_SUFFIX="_prefill"
+    ENFORCE_EAGER_FLAG="--enforce-eager"
 fi
+
+export GLOO_SOCKET_IFNAME=eth3 # this has to be non-IB network interface
 
 # Data Parallel Attention / Expert Parallelism
 # Routing to DP workers managed by Dynamo
 for ((i=0; i<GPUS_PER_NODE; i++)); do
     dp_rank=$((i + NODE_RANK * GPUS_PER_NODE))
-    DYN_LOG=debug CUDA_VISIBLE_DEVICES=$i \
-        VLLM_ALL2ALL_BACKEND="deepep_low_latency" \
+    CUDA_VISIBLE_DEVICES=$i \
+        VLLM_ALL2ALL_BACKEND=$VLLM_ALL2ALL_BACKEND \
         VLLM_USE_DEEP_GEMM=1 \
         VLLM_RANDOMIZE_DP_DUMMY_INPUTS=1 \
         python3 -m dynamo.vllm \
         --model $MODEL \
         --served-model-name $SERVED_MODEL_NAME \
+        --tensor-parallel-size 1 \
         --data_parallel_size $DATA_PARALLEL_SIZE \
-        --data-parallel-rank $dp_rank \
-        --enable-expert-parallel \
-        --max-model-len 10240 \
         --data-parallel-address $MASTER_ADDR \
         --data-parallel-rpc-port 13345 \
-        --gpu-memory-utilization 0.95 \
-        --enforce-eager $IS_PREFILL_WORKER_FLAG 2>&1 | tee $LOG_DIR/dsr1_dep_${dp_rank}.log &
+        --data-parallel-rank $dp_rank \
+        --max-model-len 8192 \
+        --gpu-memory-utilization 0.8 \
+        --enable-expert-parallel \
+        $ENFORCE_EAGER_FLAG $IS_PREFILL_WORKER_FLAG 2>&1 | tee $LOG_DIR/dsr1_dep_${dp_rank}${LOGFILE_SUFFIX}.log &
 done
 
 echo "All workers starting. (press Ctrl+C to stop)..."
