@@ -77,4 +77,4 @@ rules:
   resources: ["dynamographdeploymentrequests"]
   verbs: ["get"]
 {{- end }}
-
+# (Remove the trailing blank line at end of file)
