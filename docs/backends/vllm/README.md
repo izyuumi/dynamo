@@ -37,10 +37,10 @@ git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
 |---------|------|-------|
 | [**Disaggregated Serving**](../../../docs/architecture/disagg_serving.md) | ✅ |  |
 | [**Conditional Disaggregation**](../../../docs/architecture/disagg_serving.md#conditional-disaggregation) | 🚧 | WIP |
-| [**KV-Aware Routing**](../../../docs/architecture/kv_cache_routing.md) | ✅ |  |
-| [**SLA-Based Planner**](../../../docs/architecture/sla_planner.md) | ✅ |  |
-| [**Load Based Planner**](../../../docs/architecture/load_planner.md) | 🚧 | WIP |
-| [**KVBM**](../../../docs/architecture/kvbm_architecture.md) | ✅ |  |
+| [**KV-Aware Routing**](../../../docs/components/router/kv-routing.md) | ✅ |  |
+| [**SLA-Based Planner**](../../../docs/components/planner/sla-planner.md) | ✅ |  |
+| [**Load Based Planner**](../../../docs/components/planner/load-planner.md) | 🚧 | WIP |
+| [**KVBM**](../../../docs/components/kvbm/architecture.md) | ✅ |  |
 | [**LMCache**](./LMCache_Integration.md) | ✅ |  |
 
 ### Large Scale P/D and WideEP Features
@@ -178,7 +178,7 @@ When using KV-aware routing, ensure deterministic hashing across processes to av
 ```bash
 vllm serve ... --enable-prefix-caching --prefix-caching-algo sha256
 ```
-See the high-level notes in [KV Cache Routing](../../../docs/architecture/kv_cache_routing.md) on deterministic event IDs.
+See the high-level notes in [KV Cache Routing](../../../docs/components/router/kv-routing.md) on deterministic event IDs.
 
 ## Request Migration
 

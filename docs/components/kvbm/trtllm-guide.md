@@ -19,7 +19,7 @@ limitations under the License.
 
 This guide explains how to leverage KVBM (KV Block Manager) to mange KV cache and do KV offloading in TensorRT-LLM (trtllm).
 
-To learn what KVBM is, please check [here](https://docs.nvidia.com/dynamo/latest/architecture/kvbm_intro.html)
+To learn what KVBM is, please check [here](https://docs.nvidia.com/dynamo/latest/components/kvbm/overview.html)
 
 > [!Note]
 > - Ensure that `etcd` and `nats` are running before starting.

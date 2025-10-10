@@ -77,6 +77,7 @@ Key features include:
    :hidden:
 
    Overview <self>
-   SLA Planner Quick Start <../kubernetes/sla_planner_quickstart>
-   Pre-Deployment Profiling <../benchmarks/pre_deployment_profiling.md>
-   SLA-based Planner <sla_planner.md>
+   SLA Planner Quick Start <../../kubernetes/sla_planner_quickstart>
+   Pre-Deployment Profiling <profiling.md>
+   Load-based Planner <load-planner.md>
+   SLA-based Planner <sla-planner.md>

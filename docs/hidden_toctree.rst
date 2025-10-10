@@ -11,36 +11,33 @@
    :maxdepth: 2
    :hidden:
 
-   runtime/README.md
-   API/nixl_connect/connector.md
-   API/nixl_connect/descriptor.md
-   API/nixl_connect/device.md
-   API/nixl_connect/device_kind.md
-   API/nixl_connect/operation_status.md
-   API/nixl_connect/rdma_metadata.md
-   API/nixl_connect/readable_operation.md
-   API/nixl_connect/writable_operation.md
-   API/nixl_connect/read_operation.md
-   API/nixl_connect/write_operation.md
-   API/nixl_connect/README.md
+   components/nixl/connector.md
+   components/nixl/descriptor.md
+   components/nixl/device.md
+   components/nixl/device_kind.md
+   components/nixl/operation_status.md
+   components/nixl/rdma_metadata.md
+   components/nixl/readable_operation.md
+   components/nixl/writable_operation.md
+   components/nixl/read_operation.md
+   components/nixl/write_operation.md
+   components/nixl/README.md
 
-   kubernetes/api_reference.md
-   kubernetes/create_deployment.md
-
-   kubernetes/fluxcd.md
-   kubernetes/gke_setup.md
-   kubernetes/grove.md
-   kubernetes/model_caching_with_fluid.md
+   kubernetes/api-reference.md
+   kubernetes/create-deployment.md
+   kubernetes/advanced/fluxcd-gitops.md
+   kubernetes/advanced/grove.md
+   kubernetes/advanced/fluid-caching.md
    kubernetes/README.md
-   guides/dynamo_run.md
-   guides/metrics.md
-   guides/run_kvbm_in_vllm.md
-   guides/run_kvbm_in_trtllm.md
 
-   architecture/kv_cache_routing.md
-   architecture/load_planner.md
+   development/dynamo-run.md
+   observability/metrics.md
+   components/kvbm/vllm-guide.md
+   components/kvbm/trtllm-guide.md
+
+   components/router/kv-routing.md
+   components/planner/load-planner.md
    architecture/request_migration.md
-   architecture/request_cancellation.md
 
    backends/trtllm/multinode/multinode-examples.md
    backends/trtllm/multinode/multinode-multimodal-example.md

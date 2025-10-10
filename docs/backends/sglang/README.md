@@ -37,11 +37,11 @@ git checkout $(git describe --tags $(git rev-list --tags --max-count=1))
 |---------|--------|-------|
 | [**Disaggregated Serving**](../../architecture/disagg_serving.md) | ✅ |  |
 | [**Conditional Disaggregation**](../../architecture/disagg_serving.md#conditional-disaggregation) | 🚧 | WIP [PR](https://github.com/sgl-project/sglang/pull/7730) |
-| [**KV-Aware Routing**](../../architecture/kv_cache_routing.md) | ✅ |  |
-| [**SLA-Based Planner**](../../architecture/sla_planner.md) | ✅ |  |
+| [**KV-Aware Routing**](../../components/router/kv-routing.md) | ✅ |  |
+| [**SLA-Based Planner**](../../components/planner/sla-planner.md) | ✅ |  |
 | [**Multimodal EPD Disaggregation**](multimodal_epd.md) | ✅ |  |
-| [**Load Based Planner**](../../architecture/load_planner.md) | ❌ | Planned |
-| [**KVBM**](../../architecture/kvbm_architecture.md) | ❌ | Planned |
+| [**Load Based Planner**](../../components/planner/load-planner.md) | ❌ | Planned |
+| [**KVBM**](../../components/kvbm/architecture.md) | ❌ | Planned |
 
 ### Large Scale P/D and WideEP Features
 

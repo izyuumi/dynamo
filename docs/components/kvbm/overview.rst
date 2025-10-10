@@ -59,8 +59,10 @@ The Dynamo KV Block Manager serves as a reference implementation that emphasizes
    :hidden:
 
    Overview <self>
-   Motivation <kvbm_motivation.md>
-   KVBM Architecture <kvbm_architecture.md>
-   Understanding KVBM components <kvbm_components.md>
-   KVBM Further Reading <kvbm_reading>
-   LMCache Integration <../backends/vllm/LMCache_Integration>
+   Motivation <motivation.md>
+   KVBM Architecture <architecture.md>
+   Understanding KVBM Components <components.md>
+   KVBM Further Reading <reading.md>
+   Running KVBM in vLLM <vllm-guide.md>
+   Running KVBM in TensorRT-LLM <trtllm-guide.md>
+   LMCache Integration <../../backends/vllm/LMCache_Integration>

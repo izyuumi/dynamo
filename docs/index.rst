@@ -50,13 +50,14 @@ Quickstart
    :hidden:
    :caption: Kubernetes Deployment
 
-   Quickstart (K8s) <../kubernetes/README.md>
-   Detailed Installation Guide <../kubernetes/installation_guide.md>
-   Dynamo Operator <../kubernetes/dynamo_operator.md>
-   Metrics <../kubernetes/metrics.md>
-   Logging <../kubernetes/logging.md>
-   Multinode <../kubernetes/multinode-deployment.md>
-   Minikube Setup <../kubernetes/minikube.md>
+   Quickstart (K8s) <kubernetes/README.md>
+   Installation Guide <kubernetes/installation.md>
+   Operator <kubernetes/operator.md>
+   API Reference <kubernetes/api-reference.md>
+   Metrics <kubernetes/observability/metrics.md>
+   Logging <kubernetes/observability/logging.md>
+   Multinode <kubernetes/advanced/multinode.md>
+   Minikube Setup <kubernetes/minikube.md>
 
 .. toctree::
    :hidden:
@@ -64,17 +65,34 @@ Quickstart
 
    Backends <_sections/backends>
    Router <components/router/README>
-   Planner <architecture/planner_intro>
-   KVBM <architecture/kvbm_intro>
+   Planner <components/planner/overview>
+   KVBM <components/kvbm/overview>
+   NIXL <components/nixl/README>
 
 .. toctree::
    :hidden:
-   :caption: Developer Guide
+   :caption: Performance
 
-   Benchmarking Guide <benchmarks/benchmarking.md>
-   SLA Planner (Autoscaling) Quickstart <kubernetes/sla_planner_quickstart>
-   Logging <guides/logging.md>
-   Health Checks <guides/health_check.md>
-   Tuning Disaggregated Serving Performance <guides/disagg_perf_tuning.md>
-   Writing Python Workers in Dynamo <guides/backend.md>
+   Benchmarking <performance/benchmarking.md>
+   Performance Tuning <performance/tuning.md>
+
+.. toctree::
+   :hidden:
+   :caption: Observability
+
+   Metrics <observability/metrics.md>
+   Logging <observability/logging.md>
+   Health Checks <observability/health-checks.md>
+
+.. toctree::
+   :hidden:
+   :caption: Development
+
+   Writing Custom Backends <development/custom-backend.md>
+   Dynamo Run <development/dynamo-run.md>
+
+.. toctree::
+   :hidden:
+   :caption: Reference
+
    Glossary <dynamo_glossary.md>

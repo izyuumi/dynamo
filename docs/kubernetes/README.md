@@ -35,7 +35,7 @@ helm fetch https://helm.ngc.nvidia.com/nvidia/ai-dynamo/charts/dynamo-platform-$
 helm install dynamo-platform dynamo-platform-${RELEASE_VERSION}.tgz --namespace ${NAMESPACE} --create-namespace
 ```
 
-For more details or customization options (including multinode deployments), see **[Installation Guide for Dynamo Kubernetes Platform](/docs/kubernetes/installation_guide.md)**.
+For more details or customization options (including multinode deployments), see **[Installation Guide for Dynamo Kubernetes Platform](/docs/kubernetes/installation.md)**.
 
 ## 2. Choose Your Backend
 
@@ -78,15 +78,15 @@ It's a Kubernetes Custom Resource that defines your inference pipeline:
 - Scaling policies
 - Frontend/backend connections
 
-Refer to the [API Reference and Documentation](/docs/kubernetes/api_reference.md) for more details.
+Refer to the [API Reference and Documentation](/docs/kubernetes/api-reference.md) for more details.
 
 ## 📖 API Reference & Documentation
 
 For detailed technical specifications of Dynamo's Kubernetes resources:
 
-- **[API Reference](/docs/kubernetes/api_reference.md)** - Complete CRD field specifications for `DynamoGraphDeployment` and `DynamoComponentDeployment`
-- **[Operator Guide](/docs/kubernetes/dynamo_operator.md)** - Dynamo operator configuration and management
-- **[Create Deployment](/docs/kubernetes/create_deployment.md)** - Step-by-step deployment creation examples
+- **[API Reference](/docs/kubernetes/api-reference.md)** - Complete CRD field specifications for `DynamoGraphDeployment` and `DynamoComponentDeployment`
+- **[Operator Guide](/docs/kubernetes/operator.md)** - Dynamo operator configuration and management
+- **[Create Deployment](/docs/kubernetes/create-deployment.md)** - Step-by-step deployment creation examples
 
 ### Choosing Your Architecture Pattern
 
@@ -170,12 +170,12 @@ Key customization points include:
 ## Additional Resources
 
 - **[Examples](/examples/README.md)** - Complete working examples
-- **[Create Custom Deployments](/docs/kubernetes/create_deployment.md)** - Build your own CRDs
-- **[Operator Documentation](/docs/kubernetes/dynamo_operator.md)** - How the platform works
+- **[Create Custom Deployments](/docs/kubernetes/create-deployment.md)** - Build your own CRDs
+- **[Operator Documentation](/docs/kubernetes/operator.md)** - How the platform works
 - **[Helm Charts](/deploy/helm/README.md)** - For advanced users
-- **[GitOps Deployment with FluxCD](/docs/kubernetes/fluxcd.md)** - For advanced users
-- **[Logging](/docs/kubernetes/logging.md)** - For logging setup
-- **[Multinode Deployment](/docs/kubernetes/multinode-deployment.md)** - For multinode deployment
-- **[Grove](/docs/kubernetes/grove.md)** - For grove details and custom installation
-- **[Monitoring](/docs/kubernetes/metrics.md)** - For monitoring setup
-- **[Model Caching with Fluid](/docs/kubernetes/model_caching_with_fluid.md)** - For model caching with Fluid
+- **[GitOps Deployment with FluxCD](/docs/kubernetes/advanced/fluxcd-gitops.md)** - For advanced users
+- **[Logging](/docs/kubernetes/observability/logging.md)** - For logging setup
+- **[Multinode Deployment](/docs/kubernetes/advanced/multinode.md)** - For multinode deployment
+- **[Grove](/docs/kubernetes/advanced/grove.md)** - For grove details and custom installation
+- **[Monitoring](/docs/kubernetes/observability/metrics.md)** - For monitoring setup
+- **[Model Caching with Fluid](/docs/kubernetes/advanced/fluid-caching.md)** - For model caching with Fluid
