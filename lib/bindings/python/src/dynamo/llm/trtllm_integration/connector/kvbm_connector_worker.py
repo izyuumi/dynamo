@@ -13,12 +13,28 @@ from dynamo.runtime import DistributedRuntime
 
 
 class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
+    class KVBMForwardPassCallback(KvCacheConnectorWorker.ForwardPassCallback):
+
+        def __init__(self, connector):
+            logger.info("KM KVBMForwardPassCallback.__init__() is called")
+            # TODO: Disable timing once done debugging
+            event = torch.cuda.Event(enable_timing=True, interprocess=False)
+            super().__init__(event)
+            self._connector = connector
+
+        def callback(self):
+            # Create a different stream to await on the event
+            stream = torch.cuda.Stream()
+            with torch.cuda.stream(stream):
+                 self.event.record()
+                 logger.info(f"KM Recording forward pass event into dynamo controlled stream: {self.event}")
+            self.event.synchronize()
+            self._connector.execute_offload_operations()
+
     def __init__(self, llm_args: TorchLlmArgs):
+        logger.info("KM DynamoKVBMConnectorWorker.__init__() is called")
         super().__init__(llm_args)
         
-        # TODO: turn `enable_timing=False` when ready to check in. `True` is for debugging only.
-        self._forward_pass_event = torch.cuda.Event(enable_timing=True, interprocess=False)
-
         self.drt = DistributedRuntime.detached()
 
         mappings = self._llm_args.parallel_config.to_mapping()
@@ -26,8 +42,10 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
 
         self._connector = RustKvConnectorWorker(self.drt, str(self.rank))
 
-    def register_forward_pass_event(self) -> torch.cuda.Event:
-        return self._forward_pass_event
+        self.forward_pass_callback = self.KVBMForwardPassCallback(self._connector)
+
+    def register_forward_pass_callback(self) -> KVBMForwardPassCallback:
+        return self.forward_pass_callback
     
     def register_kv_caches(self, kv_cache_tensor: torch.Tensor):
         """
@@ -110,8 +128,12 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
             layer_idx: The index of the layer to save.
             stream: The stream the forward pass is being executed on.
         """
-        self.events[layer_idx].record(stream)
-        self._connector.save_kv_layer(layer_idx)
+        # TODO: Re-enbable this once we implement layerwise offloading. 
+        # For now, disable to not collide with KVBMForwardPassCallback.
+        #
+        # self.events[layer_idx].record(stream)
+        # self._connector.save_kv_layer(layer_idx)
+        pass
 
     def get_finished(
         self, finished_gen_req_ids: list[int], started_loading_req_ids: list[int]
