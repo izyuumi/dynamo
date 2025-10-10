@@ -109,9 +109,9 @@ trap 'cleanup; exit 130' INT
 trap 'cleanup; exit 143' TERM
 
 # run ingress if it's node 0 and is not a prefill worker
-# if [ "$NODE_RANK" -eq 0 ] && [ "$IS_PREFILL_WORKER" = "false" ]; then
-#     DYN_LOG=debug python -m dynamo.frontend --router-mode kv --http-port=8000 2>&1 | tee $LOG_DIR/dsr1_dep_ingress.log &
-# fi
+if [ "$NODE_RANK" -eq 0 ] && [ "$IS_PREFILL_WORKER" = "false" ]; then
+    python -m dynamo.frontend --router-mode kv --http-port=8000 2>&1 | tee $LOG_DIR/dsr1_dep_ingress.log &
+fi
 
 mkdir -p $LOG_DIR
 
