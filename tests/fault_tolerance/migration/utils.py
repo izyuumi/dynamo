@@ -6,15 +6,13 @@ import os
 import queue
 import shutil
 import threading
-import time
 
 import pytest
 import requests
 
 from tests.utils.constants import FAULT_TOLERANCE_MODEL_NAME
 from tests.utils.engine_process import FRONTEND_PORT
-from tests.utils.managed_process import ManagedProcess, terminate_process_tree
-from tests.utils.payloads import check_models_api
+from tests.utils.managed_process import ManagedProcess
 
 logger = logging.getLogger(__name__)
 
@@ -43,82 +41,8 @@ class DynamoFrontendProcess(ManagedProcess):
         )
 
 
-class DynamoWorkerProcess(ManagedProcess):
-    """Process manager for Dynamo worker with vLLM backend"""
-
-    def __init__(self, request, worker_id: str):
-        self.worker_id = worker_id
-
-        command = [
-            "python3",
-            "-m",
-            "dynamo.vllm",
-            "--model",
-            FAULT_TOLERANCE_MODEL_NAME,
-            "--enforce-eager",
-            "--gpu-memory-utilization",
-            "0.45",
-            "--max-model-len",
-            "8192",
-            "--migration-limit",
-            "3",
-        ]
-
-        # Set debug logging environment
-        env = os.environ.copy()
-        env["DYN_LOG"] = "debug"
-        env["DYN_SYSTEM_ENABLED"] = "true"
-        env["DYN_SYSTEM_USE_ENDPOINT_HEALTH_STATUS"] = '["generate"]'
-        env["DYN_SYSTEM_PORT"] = f"808{worker_id[-1]}"
-
-        # TODO: Have the managed process take a command name explicitly to distinguish
-        #       between processes started with the same command.
-        log_dir = f"{request.node.name}_{worker_id}"
-
-        # Clean up any existing log directory from previous runs
-        try:
-            shutil.rmtree(log_dir)
-            logger.info(f"Cleaned up existing log directory: {log_dir}")
-        except FileNotFoundError:
-            # Directory doesn't exist, which is fine
-            pass
-
-        super().__init__(
-            command=command,
-            env=env,
-            health_check_urls=[
-                (f"http://localhost:{FRONTEND_PORT}/v1/models", check_models_api),
-                (f"http://localhost:808{worker_id[-1]}/health", self.is_ready),
-            ],
-            timeout=300,
-            display_output=True,
-            terminate_existing=False,
-            stragglers=["VLLM::EngineCore"],
-            straggler_commands=["-m dynamo.vllm"],
-            log_dir=log_dir,
-        )
-
-    def get_pid(self):
-        """Get the PID of the worker process"""
-        return self.proc.pid if self.proc else None
-
-    def is_ready(self, response) -> bool:
-        """Check the health of the worker process"""
-        try:
-            data = response.json()
-            if data.get("status") == "ready":
-                logger.info(f"{self.worker_id} status is ready")
-                return True
-            logger.warning(
-                f"{self.worker_id} status is not ready: {data.get('status')}"
-            )
-        except ValueError:
-            logger.warning(f"{self.worker_id} health response is not valid JSON")
-        return False
-
-
 def send_completion_request(
-    prompt: str, max_tokens: int, timeout: int = 120
+    prompt: str, max_tokens: int = 50, timeout: int = 10
 ) -> requests.Response:
     """Send a completion request to the frontend"""
     payload = {
@@ -135,7 +59,7 @@ def send_completion_request(
 
     try:
         response = requests.post(
-            "http://localhost:8000/v1/completions",
+            f"http://localhost:{FRONTEND_PORT}/v1/completions",
             headers=headers,
             json=payload,
             timeout=timeout,
@@ -172,7 +96,7 @@ def validate_openai_response(response: requests.Response) -> None:
     )
 
 
-def check_worker_received_request(worker_process: DynamoWorkerProcess) -> bool:
+def check_worker_received_request(worker_process: ManagedProcess) -> bool:
     """Check if the worker logs contain 'New Request ID:' message indicating it received a request"""
     log_path = worker_process._log_path
     if log_path and os.path.exists(log_path):
@@ -185,7 +109,7 @@ def check_worker_received_request(worker_process: DynamoWorkerProcess) -> bool:
     return False
 
 
-def determine_worker_roles(worker1: DynamoWorkerProcess, worker2: DynamoWorkerProcess):
+def determine_worker_roles(worker1: ManagedProcess, worker2: ManagedProcess):
     """Determine primary and backup workers based on which worker handled the test request"""
     worker1_received_test = check_worker_received_request(worker1)
     worker2_received_test = check_worker_received_request(worker2)
@@ -206,12 +130,9 @@ def determine_worker_roles(worker1: DynamoWorkerProcess, worker2: DynamoWorkerPr
         )
 
 
-def start_completion_request(primary_worker_name: str):
+def start_completion_request():
     """
     Start a request in a separate thread.
-
-    Args:
-        primary_worker_name: Name of the primary worker expected to handle the request
 
     Returns:
         tuple: (request_thread, response_queue)
@@ -284,77 +205,3 @@ def verify_migration_occurred(frontend_process: DynamoFrontendProcess) -> None:
                 )
     except Exception as e:
         pytest.fail(f"Could not read frontend log file {log_path}: {e}")
-
-
-@pytest.mark.vllm
-@pytest.mark.gpu_1
-@pytest.mark.e2e
-@pytest.mark.model(FAULT_TOLERANCE_MODEL_NAME)
-def test_request_migration_vllm(
-    request, runtime_services, predownload_models, set_ucx_tls_no_mm
-):
-    """
-    End-to-end test for worker fault tolerance with migration support.
-
-    This test verifies that when a worker is killed during request processing,
-    the system can handle the failure gracefully and migrate the request to
-    another worker.
-    """
-
-    # Step 1: Start the frontend
-    with DynamoFrontendProcess(request) as frontend:
-        logger.info("Frontend started successfully")
-
-        # Step 2: Start 2 workers sequentially
-
-        # Start worker1 first and wait for it to be ready
-        logger.info("Starting worker 1...")
-        worker1 = DynamoWorkerProcess(request, "worker1")
-
-        with worker1:
-            # Start worker2 after worker1 is ready
-            logger.info("Starting worker 2...")
-            worker2 = DynamoWorkerProcess(request, "worker2")
-
-            with worker2:
-                logger.info(f"Worker 1 PID: {worker1.get_pid()}")
-                logger.info(f"Worker 2 PID: {worker2.get_pid()}")
-
-                # Step 3: Send a test request to see which worker handles it
-                logger.info("Sending test request to determine worker assignment...")
-                test_response = send_completion_request("Who are you?", 100, timeout=60)
-                validate_openai_response(test_response)
-                logger.info("Test request completed successfully")
-
-                # Step 4: Determine worker roles based on test request handling
-                # Frontend must use round-robin for the detection to work correctly
-                primary_worker, backup_worker = determine_worker_roles(worker1, worker2)
-
-                # Step 5: Send the formal request (expected to be received by the primary worker)
-                logger.info(
-                    f"Sending formal request - expected to be handled by {primary_worker[1]}"
-                )
-                request_thread, response_queue = start_completion_request(
-                    primary_worker[1]
-                )
-
-                # Step 6: Wait 0.5 seconds after sending the formal request, then kill the primary worker
-                logger.info(
-                    f"Killing {primary_worker[1]} with PID {primary_worker[0].get_pid()}"
-                )
-                time.sleep(0.5)
-                terminate_process_tree(
-                    primary_worker[0].get_pid(), immediate_kill=True, timeout=0
-                )
-
-                # Step 7: Validate the completion response
-                logger.info("Waiting for formal request to complete")
-                validate_completion_response(request_thread, response_queue)
-
-                # Step 8: Verify migration occurred
-                logger.info("Checking for migration message in frontend logs")
-                verify_migration_occurred(frontend)
-
-                logger.info(
-                    "Test completed successfully - migration is detected and the request was successful"
-                )
