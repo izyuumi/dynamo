@@ -56,7 +56,7 @@ type ConfigMapKeySelector struct {
 type ProfilingConfigSpec struct {
 	// ConfigMapRef is a reference to a ConfigMap containing the profiling configuration.
 	// The ConfigMap should contain a key (default: "disagg.yaml") with the configuration file.
-	// This is only used for online profiling.
+	// Can be used for both online and offline (AIC) profiling.
 	// +kubebuilder:validation:Optional
 	ConfigMapRef *ConfigMapKeySelector `json:"configMapRef,omitempty"`
 }
@@ -121,7 +121,7 @@ type DynamoGraphDeploymentRequestSpec struct {
 	DeploymentOverrides *DeploymentOverridesSpec `json:"deploymentOverrides,omitempty"`
 
 	// ProfilingConfig provides configuration for the profiling job.
-	// Only used when Online is true.
+	// Can be used for both online and offline (AIC) profiling.
 	// +kubebuilder:validation:Optional
 	ProfilingConfig *ProfilingConfigSpec `json:"profilingConfig,omitempty"`
 }

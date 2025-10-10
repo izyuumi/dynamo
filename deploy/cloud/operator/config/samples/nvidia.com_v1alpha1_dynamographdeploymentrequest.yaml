@@ -26,10 +26,10 @@ spec:
   gpu: # optional
     type: h200
   online: true # true for online profiler, false for AIC profiler
-  
+
   # Optional: Automatically create DynamoGraphDeployment after profiling
   autoApply: true  # default is false
-  
+
   # Optional: Override metadata for auto-created DGD (only used when autoApply: true)
   # deploymentOverrides:
   #   name: my-custom-dgd-name
@@ -38,7 +38,7 @@ spec:
   #     team: ml-platform
   #   annotations:
   #     description: "Auto-generated from DGDR"
-  
+
   # Optional: Profiling configuration (only for online profiling)
   # profilingConfig:
   #   configMapRef:
