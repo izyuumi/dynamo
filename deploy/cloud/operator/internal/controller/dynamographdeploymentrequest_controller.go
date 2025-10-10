@@ -123,7 +123,7 @@ const (
 	MessageAICProfilingJobCreated    = "AIC profiling job created"
 	MessageProfilingInProgress       = "Profiling is in progress"
 	MessageSpecGenerated             = "DynamoGraphDeployment spec generated successfully"
-	MessageSpecAvailable             = "Generated spec is available in status.generatedSpec"
+	MessageSpecAvailable             = "Generated spec is available in status.generatedDeployment"
 	MessageDeploymentCreated         = "DynamoGraphDeployment %s created successfully"
 	MessageDeploymentReady           = "DynamoGraphDeployment %s is ready"
 	MessageDeploymentDegraded        = "DynamoGraphDeployment %s degraded from Ready to %s"
@@ -131,6 +131,7 @@ const (
 	MessageInvalidState              = "Invalid state"
 	MessageSpecChangeRejected        = "Cannot modify spec in state '%s'. DynamoGraphDeploymentRequest is immutable once profiling starts. Create a new resource with a different name instead."
 	MessageJobCreationFailed         = "JobCreationFailed"
+	MessageDeploymentCreationFailed  = "DeploymentCreationFailed"
 	MessageResultsRetrievalFailed    = "ResultsRetrievalFailed"
 	MessageGenerationFailed          = "GenerationFailed"
 	MessageAIConfiguratorCheckFailed = "AIConfiguratorCheckFailed"
@@ -159,7 +160,8 @@ type DynamoGraphDeploymentRequestReconciler struct {
 	// OnlineProfilingImage is the container image to use for online profiling jobs
 	OnlineProfilingImage string
 	// AICProfilingImage is the container image to use for AIC (AI Configurator) profiling jobs
-	AICProfilingImage string
+	// TODO: Commenting out AIC code for this MR - keep using Profiler with AIC flag(s)
+	// AICProfilingImage string
 	// RBACMgr handles RBAC setup for profiling jobs
 	RBACManager RBACManager
 }
@@ -192,6 +194,9 @@ func (r *DynamoGraphDeploymentRequestReconciler) FinalizeResource(ctx context.Co
 // +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeploymentrequests,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeploymentrequests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeploymentrequests/finalizers,verbs=update
+// +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeployments/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeployments/finalizers,verbs=update
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
@@ -222,24 +227,24 @@ func (r *DynamoGraphDeploymentRequestReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, nil
 	}
 
-// Check for spec changes (immutability enforcement)
-if dgdr.Status.ObservedGeneration > 0 && dgdr.Status.ObservedGeneration != dgdr.Generation {
-    // Spec changed after initial processing
-    if dgdr.Status.State == StateProfiling || dgdr.Status.State == StateDeploying ||
-       dgdr.Status.State == StateReady || dgdr.Status.State == StateDeploymentDeleted {
-        logger.Info("Spec change detected in immutable state",
-            "state", dgdr.Status.State,
-            "observedGeneration", dgdr.Status.ObservedGeneration,
-            "currentGeneration", dgdr.Generation)
+	// Check for spec changes (immutability enforcement)
+	if dgdr.Status.ObservedGeneration > 0 && dgdr.Status.ObservedGeneration != dgdr.Generation {
+		// Spec changed after initial processing
+		if dgdr.Status.State == StateProfiling || dgdr.Status.State == StateDeploying ||
+			dgdr.Status.State == StateReady || dgdr.Status.State == StateDeploymentDeleted {
+			logger.Info("Spec change detected in immutable state",
+				"state", dgdr.Status.State,
+				"observedGeneration", dgdr.Status.ObservedGeneration,
+				"currentGeneration", dgdr.Generation)
 
-        r.Recorder.Event(dgdr, corev1.EventTypeWarning, EventReasonSpecChangeRejected,
-            fmt.Sprintf(MessageSpecChangeRejected, dgdr.Status.State))
+			r.Recorder.Event(dgdr, corev1.EventTypeWarning, EventReasonSpecChangeRejected,
+				fmt.Sprintf(MessageSpecChangeRejected, dgdr.Status.State))
 
-        // Keep the old observedGeneration to continue rejecting changes
-        // No state transition - stay in current state with old spec
-        return ctrl.Result{}, nil
-    }
-}
+			// Keep the old observedGeneration to continue rejecting changes
+			// No state transition - stay in current state with old spec
+			return ctrl.Result{}, nil
+		}
+	}
 	// State machine: handle different states
 	switch dgdr.Status.State {
 	case StateEmpty:
@@ -293,11 +298,12 @@ func (r *DynamoGraphDeploymentRequestReconciler) handlePendingState(ctx context.
 	}
 
 	// Record event with appropriate message
-	if dgdr.Spec.Online {
-		r.Recorder.Event(dgdr, corev1.EventTypeNormal, EventReasonProfilingJobCreated, MessageProfilingJobCreated)
-	} else {
-		r.Recorder.Event(dgdr, corev1.EventTypeNormal, EventReasonProfilingJobCreated, MessageAICProfilingJobCreated)
-	}
+	// TODO: Commenting out AIC-specific messaging for this MR - keep using Profiler with AIC flag(s)
+	// if dgdr.Spec.Online {
+	r.Recorder.Event(dgdr, corev1.EventTypeNormal, EventReasonProfilingJobCreated, MessageProfilingJobCreated)
+	// } else {
+	// 	r.Recorder.Event(dgdr, corev1.EventTypeNormal, EventReasonProfilingJobCreated, MessageAICProfilingJobCreated)
+	// }
 
 	// Update to Profiling state with Running status
 	return r.updateStateWithCondition(ctx, dgdr, StateProfiling, ConditionTypeProfiling, metav1.ConditionFalse, "ProfilingRunning", MessageProfilingInProgress)
@@ -308,7 +314,8 @@ func (r *DynamoGraphDeploymentRequestReconciler) handleProfilingState(ctx contex
 	logger := log.FromContext(ctx)
 	logger.Info("Handling profiling state", "name", dgdr.Name)
 
-	// Check profiling job status (both online and AIC run as Jobs now)
+	// Check profiling job status
+	// TODO: Commenting out AIC code for this MR - keep using Profiler with AIC flag(s)
 	// Note: We watch the Job via Owns(), so we'll be triggered automatically on Job changes
 	completed, err := r.checkProfilingJobStatus(ctx, dgdr)
 	if err != nil {
@@ -510,8 +517,8 @@ func (r *DynamoGraphDeploymentRequestReconciler) createDGD(ctx context.Context, 
 		return ctrl.Result{}, fmt.Errorf("generatedDeployment has neither Object nor Raw set")
 	}
 
-	// Determine DGD name and namespace (start with generated DGD's metadata)
-	dgdName := generatedDGD.Name
+	// Determine DGD name and namespace (start with DGDR's metadata)
+	dgdName := dgdr.Name
 	dgdNamespace := dgdr.Namespace
 
 	if dgdr.Spec.DeploymentOverrides != nil {
@@ -587,7 +594,7 @@ func (r *DynamoGraphDeploymentRequestReconciler) createDGD(ctx context.Context, 
 			}
 			return ctrl.Result{}, r.Status().Update(ctx, dgdr)
 		}
-		r.Recorder.Event(dgdr, corev1.EventTypeWarning, MessageJobCreationFailed, err.Error())
+		r.Recorder.Event(dgdr, corev1.EventTypeWarning, MessageDeploymentCreationFailed, err.Error())
 		return ctrl.Result{}, err
 	}
 
@@ -630,12 +637,13 @@ func (r *DynamoGraphDeploymentRequestReconciler) handleFailedState(ctx context.C
 
 // getProfilingJobName returns the job name for a DGDR based on profiling mode
 func getProfilingJobName(dgdr *nvidiacomv1alpha1.DynamoGraphDeploymentRequest) string {
+	// TODO: Commenting out AIC code for this MR - keep using Profiler with AIC flag(s)
 	var jobNamePrefix string
-	if dgdr.Spec.Online {
-		jobNamePrefix = JobNamePrefixOnline
-	} else {
-		jobNamePrefix = JobNamePrefixAIC
-	}
+	// if dgdr.Spec.Online {
+	jobNamePrefix = JobNamePrefixOnline
+	// } else {
+	// 	jobNamePrefix = JobNamePrefixAIC
+	// }
 	return fmt.Sprintf("%s%s", jobNamePrefix, dgdr.Name)
 }
 
@@ -716,26 +724,28 @@ func (r *DynamoGraphDeploymentRequestReconciler) createProfilingJob(ctx context.
 	}
 
 	// Determine image and label based on profiling mode
+	// TODO: Commenting out AIC code for this MR - keep using Profiler with AIC flag(s)
 	var imageName, labelValue string
-	if dgdr.Spec.Online {
-		imageName = r.OnlineProfilingImage
-		labelValue = LabelValueDynamoProfiler
-	} else {
-		imageName = r.AICProfilingImage
-		labelValue = LabelValueAICProfiler
-	}
+	// if dgdr.Spec.Online {
+	imageName = r.OnlineProfilingImage
+	labelValue = LabelValueDynamoProfiler
+	// } else {
+	// 	imageName = r.AICProfilingImage
+	// 	labelValue = LabelValueAICProfiler
+	// }
 
 	if imageName == "" {
-		mode := "online"
-		if !dgdr.Spec.Online {
-			mode = "AIC"
-		}
-		return fmt.Errorf("%s profiling image not configured", mode)
+		// mode := "online"
+		// if !dgdr.Spec.Online {
+		// 	mode = "AIC"
+		// }
+		return fmt.Errorf("profiling image not configured")
 	}
 
 	// Use SyncResource to create/update the job
 	modified, job, err := commonController.SyncResource(ctx, r, dgdr, func(ctx context.Context) (*batchv1.Job, bool, error) {
 		jobName := getProfilingJobName(dgdr)
+		outputConfigMapName := getOutputConfigMapName(dgdr)
 
 		// TODO: Build args for actual profiler command
 		// args := []string{
@@ -931,11 +941,12 @@ echo "Saved profiling output to ConfigMap %s"
 	}
 
 	if modified {
-		if dgdr.Spec.Online {
-			logger.Info("Online profiling job created/updated", "job", job.Name)
-		} else {
-			logger.Info("AIC profiling job created/updated", "job", job.Name)
-		}
+		// TODO: Commenting out AIC-specific logging for this MR - keep using Profiler with AIC flag(s)
+		// if dgdr.Spec.Online {
+		logger.Info("Profiling job created/updated", "job", job.Name)
+		// } else {
+		// 	logger.Info("AIC profiling job created/updated", "job", job.Name)
+		// }
 	}
 
 	return nil
@@ -965,10 +976,11 @@ func (r *DynamoGraphDeploymentRequestReconciler) checkProfilingJobStatus(ctx con
 	return false, nil
 }
 
-// generateDGDSpec generates DGD spec from profiling results (online or AIC)
+// generateDGDSpec generates DGD spec from profiling results
+// TODO: Commenting out AIC code for this MR - keep using Profiler with AIC flag(s)
 func (r *DynamoGraphDeploymentRequestReconciler) generateDGDSpec(ctx context.Context, dgdr *nvidiacomv1alpha1.DynamoGraphDeploymentRequest) error {
 	logger := log.FromContext(ctx)
-	logger.Info("Generating DGD spec from profiling results", "name", dgdr.Name, "online", dgdr.Spec.Online)
+	logger.Info("Generating DGD spec from profiling results", "name", dgdr.Name) // , "online", dgdr.Spec.Online)
 
 	// Read the generated spec from ConfigMap (created by sidecar)
 	outputConfigMapName := getOutputConfigMapName(dgdr)
