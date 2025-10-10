@@ -25,7 +25,7 @@ use dynamo_runtime::{DistributedRuntime, protocols::EndpointId};
 use crate::entrypoint::EngineConfig;
 
 pub async fn run(
-    distributed_runtime: Arc<DistributedRuntime>,
+    distributed_runtime: DistributedRuntime,
     path: String,
     engine_config: EngineConfig,
 ) -> anyhow::Result<()> {

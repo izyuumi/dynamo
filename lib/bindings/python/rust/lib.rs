@@ -292,7 +292,7 @@ fn register_llm<'p>(
 #[pyclass]
 #[derive(Clone)]
 pub struct DistributedRuntime {
-    inner: Arc<rs::DistributedRuntime>,
+    inner: rs::DistributedRuntime,
     event_loop: PyObject,
 }
 
@@ -408,10 +408,7 @@ impl DistributedRuntime {
             };
         let inner = inner.map_err(to_pyerr)?;
 
-        Ok(DistributedRuntime {
-            inner: Arc::new(inner),
-            event_loop,
-        })
+        Ok(DistributedRuntime { inner, event_loop })
     }
 
     #[staticmethod]
@@ -424,7 +421,7 @@ impl DistributedRuntime {
             .map_err(to_pyerr)?;
 
         Ok(DistributedRuntime {
-            inner: Arc::new(inner),
+            inner,
             event_loop: py.None(),
         })
     }
@@ -590,10 +587,10 @@ impl DistributedRuntime {
         CancellationToken { inner }
     }
 
-    /// Return a typed PyCapsule carrying a Weak<rs::DistributedRuntime>.
     #[pyo3(name = "to_capsule")]
     fn to_capsule<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
-        let weak: Weak<rs::DistributedRuntime> = Arc::downgrade(&self.inner);
+        let arc: Arc<rs::DistributedRuntime> = Arc::new(self.inner.clone());
+        let weak: Weak<rs::DistributedRuntime> = Arc::downgrade(&arc);
 
         let name = CString::new("dynamo.runtime.weak").expect("valid capsule name");
 
