@@ -140,7 +140,7 @@ dynamo-operator:
       # -- Container image to use for online profiling jobs
       onlineProfilingImage: ""
       
-      # --Container image to use for AIC (AI Configurator) profiling jobs
+      # -- Container image to use for AIC (AI Configurator) profiling jobs
       aicProfilingImage: ""
 
 
