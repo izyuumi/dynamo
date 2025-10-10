@@ -208,40 +208,7 @@ echo "ISL: $isl"
 echo "OSL: $osl"
 echo "Concurrency levels: ${concurrency_array[@]}"
 
-# Concurrency levels to test
-for concurrency in "${concurrency_array[@]}"; do
-  echo "Run concurrency: $concurrency"
 
-  # NOTE: For Dynamo HTTP OpenAI frontend, use `nvext` for fields like
-  # `ignore_eos` since they are not in the official OpenAI spec.
-  genai-perf profile \
-    --model ${model} \
-    --tokenizer ${model} \
-    --endpoint-type chat \
-    --endpoint /v1/chat/completions \
-    --streaming \
-    --url ${url} \
-    --synthetic-input-tokens-mean ${isl} \
-    --synthetic-input-tokens-stddev 0 \
-    --output-tokens-mean ${osl} \
-    --output-tokens-stddev 0 \
-    --extra-inputs max_tokens:${osl} \
-    --extra-inputs min_tokens:${osl} \
-    --extra-inputs ignore_eos:true \
-    --extra-inputs "{\"nvext\":{\"ignore_eos\":true}}" \
-    --concurrency ${concurrency} \
-    --request-count $(($concurrency*10)) \
-    --warmup-request-count $(($concurrency*2)) \
-    --num-dataset-entries $(($concurrency*12)) \
-    --random-seed 100 \
-    --artifact-dir ${artifact_dir} \
-    -- \
-    -v \
-    --max-threads ${concurrency} \
-    -H 'Authorization: Bearer NOT USED' \
-    -H 'Accept: text/event-stream'
-
-done
 
 # The configuration is dumped to a JSON file which hold details of the OAI service
 # being benchmarked.
@@ -268,5 +235,38 @@ if [ -f "${artifact_dir}/deployment_config.json" ]; then
   rm -f "${artifact_dir}/deployment_config.json"
 fi
 echo "${deployment_config}" > "${artifact_dir}/deployment_config.json"
+
+# Concurrency levels to test
+for concurrency in "${concurrency_array[@]}"; do
+  echo "Run concurrency: $concurrency"
+
+  # NOTE: For Dynamo HTTP OpenAI frontend, use `nvext` for fields like
+  # `ignore_eos` since they are not in the official OpenAI spec.
+  genai-perf profile \
+    --model ${model} \
+    --tokenizer ${model} \
+    --endpoint-type chat \
+    --endpoint /v1/chat/completions \
+    --streaming \
+    --url ${url} \
+    --synthetic-input-tokens-mean ${isl} \
+    --synthetic-input-tokens-stddev 0 \
+    --output-tokens-mean ${osl} \
+    --output-tokens-stddev 0 \
+    --extra-inputs max_tokens:${osl} \
+    --extra-inputs min_tokens:${osl} \
+    --extra-inputs ignore_eos:true \
+    --concurrency ${concurrency} \
+    --request-count $(($concurrency*10)) \
+    --num-dataset-entries $(($concurrency*10)) \
+    --random-seed ${concurrency} \
+    --artifact-dir ${artifact_dir} \
+    -- \
+    -v \
+    --max-threads ${concurrency} \
+    -H 'Authorization: Bearer NOT USED' \
+    -H 'Accept: text/event-stream'
+
+done
 
 echo "Benchmarking Successful!!!"
