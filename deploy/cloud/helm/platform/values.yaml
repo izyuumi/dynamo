@@ -137,11 +137,8 @@ dynamo-operator:
 
     # DynamoGraphDeploymentRequest (DGDR) configuration
     dgdr:
-      # -- Container image to use for online profiling jobs
-      onlineProfilingImage: ""
-
-      # -- Container image to use for AIC (AI Configurator) profiling jobs
-      aicProfilingImage: ""
+      # -- Container image to use for profiling jobs (both online and offline/AIC)
+      profilerImage: ""
 
 
 # Grove component - distributed inference orchestration

@@ -119,13 +119,9 @@ dynamo:
 
   # DynamoGraphDeploymentRequest (DGDR) configuration
   dgdr:
-    # Container image to use for online profiling jobs
-    onlineProfilingImage: ""
-    # Example: "nvcr.io/nvidia/dynamo-online-profiler:v1.0.0"
-
-    # Container image to use for AIC (AI Configurator) profiling jobs
-    aicProfilingImage: ""
-    # Example: "nvcr.io/nvidia/dynamo-aic-profiler:v1.0.0"
+    # Container image to use for profiling jobs (both online and offline/AIC)
+    profilerImage: ""
+    # Example: "nvcr.io/nvidia/dynamo-profiler:v1.0.0"
 
 
 #imagePullSecrets: []
