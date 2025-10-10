@@ -46,7 +46,7 @@ type VllmController = Arc<
 #[derive(Clone)]
 pub struct BlockManager {
     inner: VllmBlockManager,
-    drt: Arc<DistributedRuntime>,
+    _drt: Option<Arc<DistributedRuntime>>,
     _controller: Option<VllmController>,
 }
 
@@ -157,7 +157,7 @@ impl BlockManager {
                     .await
                 })
                 .map_err(to_pyerr)?,
-            drt,
+            _drt: drt,
             _controller: None,
         })
     }
@@ -173,10 +173,7 @@ impl BlockManager {
         }
 
         let block_manager = self.inner.clone();
-        let controller = self
-            .drt
-            .runtime()
-            .primary()
+        let controller = get_current_tokio_handle()
             .block_on(controller::Controller::new(
                 block_manager,
                 component.inner.clone(),
@@ -314,7 +311,7 @@ impl BlockManagerBuilder {
 
         Ok(BlockManager {
             inner,
-            drt,
+            _drt: drt,
             _controller: None,
         })
     }
