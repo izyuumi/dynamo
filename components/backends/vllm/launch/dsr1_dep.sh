@@ -122,7 +122,7 @@ if [ "$IS_PREFILL_WORKER" = "true" ]; then
     IS_PREFILL_WORKER_FLAG="--is-prefill-worker"
     VLLM_ALL2ALL_BACKEND="deepep_high_throughput" # this kernel is better for prefill workers
     LOGFILE_SUFFIX="_prefill"
-    ENFORCE_EAGER_FLAG="--enforce-eager"
+    ENFORCE_EAGER_FLAG="--enforce-eager" # deepep_high_throughput is not suppored with cuda graphs, check if this flag is needed
 fi
 
 export GLOO_SOCKET_IFNAME=eth3 # this has to be non-IB network interface
