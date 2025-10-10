@@ -55,7 +55,7 @@ mod http;
 mod llm;
 mod parsers;
 mod planner;
-mod prometheus_names;
+mod prometheus_metrics;
 
 type JsonServerStreamingIngress =
     Ingress<SingleIn<serde_json::Value>, ManyOut<RsAnnotated<serde_json::Value>>>;
@@ -174,7 +174,6 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<llm::kv::WorkerStats>()?;
     m.add_class::<llm::kv::KvStats>()?;
     m.add_class::<llm::kv::SpecDecodeStats>()?;
-    m.add_class::<llm::kv::KvRouter>()?;
     m.add_class::<llm::kv::KvPushRouter>()?;
     m.add_class::<llm::kv::KvPushRouterStream>()?;
     m.add_class::<RouterMode>()?;
@@ -185,7 +184,11 @@ fn _core(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     engine::add_to_module(m)?;
     parsers::add_to_module(m)?;
-    prometheus_names::add_to_module(m)?;
+
+    m.add_class::<prometheus_metrics::PyRuntimeMetrics>()?;
+    let prometheus_metrics = PyModule::new(m.py(), "prometheus_metrics")?;
+    prometheus_metrics::add_to_module(&prometheus_metrics)?;
+    m.add_submodule(&prometheus_metrics)?;
 
     #[cfg(feature = "block-manager")]
     llm::block_manager::add_to_module(m)?;
@@ -419,15 +422,6 @@ impl DistributedRuntime {
         })
     }
 
-    /// Remove everything in an etcd namespace.
-    /// Will be removed once we can clear the MDC automatically.
-    fn temp_clear_namespace<'p>(&self, py: Python<'p>, name: String) -> PyResult<Bound<'p, PyAny>> {
-        let inner = self.inner.clone();
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            inner.temp_clear_namespace(&name).await.map_err(to_pyerr)
-        })
-    }
-
     fn namespace(&self, name: String) -> PyResult<Namespace> {
         Ok(Namespace {
             inner: self.inner.namespace(name).map_err(to_pyerr)?,
@@ -595,7 +589,7 @@ fn bind_tcp_port(port: u16) -> std::io::Result<socket2::Socket> {
 }
 
 fn make_port_key(namespace: &str, node_ip: IpAddr, port: u16) -> anyhow::Result<String> {
-    Ok(format!("dyn://{namespace}/ports/{node_ip}/{port}"))
+    Ok(format!("v1/{namespace}/ports/{node_ip}/{port}"))
 }
 
 fn local_ip() -> Result<IpAddr, local_ip_address::Error> {
@@ -639,6 +633,12 @@ impl Component {
             let _ = builder.create().await.map_err(to_pyerr)?;
             Ok(())
         })
+    }
+
+    /// Get a RuntimeMetrics helper for creating Prometheus metrics
+    #[getter]
+    fn metrics(&self) -> prometheus_metrics::PyRuntimeMetrics {
+        prometheus_metrics::PyRuntimeMetrics::from_component(self.inner.clone())
     }
 }
 
@@ -723,6 +723,12 @@ impl Endpoint {
             .map(|l| l.id())
             .unwrap_or(0)
     }
+
+    /// Get a RuntimeMetrics helper for creating Prometheus metrics
+    #[getter]
+    fn metrics(&self) -> prometheus_metrics::PyRuntimeMetrics {
+        prometheus_metrics::PyRuntimeMetrics::from_endpoint(self.inner.clone())
+    }
 }
 
 #[pymethods]
@@ -733,6 +739,12 @@ impl Namespace {
             inner,
             event_loop: self.event_loop.clone(),
         })
+    }
+
+    /// Get a RuntimeMetrics helper for creating Prometheus metrics
+    #[getter]
+    fn metrics(&self) -> prometheus_metrics::PyRuntimeMetrics {
+        prometheus_metrics::PyRuntimeMetrics::from_namespace(self.inner.clone())
     }
 }
 
