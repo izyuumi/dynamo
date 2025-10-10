@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+# Keeping this import is important because it runs the code in nixl’s __init__.py
+# to set up the Nixl plugin path.
+import nixl  # noqa: F401
 import torch
 from vllm.config import VllmConfig
 from vllm.distributed.kv_transfer.kv_connector.v1.base import KVConnectorMetadata
