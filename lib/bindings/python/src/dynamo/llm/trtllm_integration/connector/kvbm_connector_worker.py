@@ -16,9 +16,7 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
     class KVBMForwardPassCallback(KvCacheConnectorWorker.ForwardPassCallback):
 
         def __init__(self, connector):
-            logger.info("KM KVBMForwardPassCallback.__init__() is called")
-            # TODO: Disable timing once done debugging
-            event = torch.cuda.Event(enable_timing=True, interprocess=False)
+            event = torch.cuda.Event(enable_timing=False, interprocess=False)
             super().__init__(event)
             self._connector = connector
 
@@ -27,12 +25,10 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
             stream = torch.cuda.Stream()
             with torch.cuda.stream(stream):
                  self.event.record()
-                 logger.info(f"KM Recording forward pass event into dynamo controlled stream: {self.event}")
             self.event.synchronize()
             self._connector.execute_offload_operations()
 
     def __init__(self, llm_args: TorchLlmArgs):
-        logger.info("KM DynamoKVBMConnectorWorker.__init__() is called")
         super().__init__(llm_args)
         
         self.drt = DistributedRuntime.detached()
@@ -54,7 +50,6 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
         Args:
             kv_cache_tensor: The contiguous KV cache tensor.
         """
-        print(f"Register KV Caches on rank {self.rank}")
         logger.info(
             f"KvConnectorWorker started registering the kv caches on rank {self.rank}"
         )
