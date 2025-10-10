@@ -222,24 +222,24 @@ func (r *DynamoGraphDeploymentRequestReconciler) Reconcile(ctx context.Context, 
 		return ctrl.Result{}, nil
 	}
 
-	// Check for spec changes (immutability enforcement)
-	if dgdr.Status.ObservedGeneration > 0 && dgdr.Status.ObservedGeneration != dgdr.Generation {
-		// Spec has changed after initial processing
-		if dgdr.Status.State == StateProfiling || dgdr.Status.State == StateReady {
-			logger.Info("Spec change detected in immutable state",
-				"state", dgdr.Status.State,
-				"observedGeneration", dgdr.Status.ObservedGeneration,
-				"currentGeneration", dgdr.Generation)
+// Check for spec changes (immutability enforcement)
+if dgdr.Status.ObservedGeneration > 0 && dgdr.Status.ObservedGeneration != dgdr.Generation {
+    // Spec changed after initial processing
+    if dgdr.Status.State == StateProfiling || dgdr.Status.State == StateDeploying ||
+       dgdr.Status.State == StateReady || dgdr.Status.State == StateDeploymentDeleted {
+        logger.Info("Spec change detected in immutable state",
+            "state", dgdr.Status.State,
+            "observedGeneration", dgdr.Status.ObservedGeneration,
+            "currentGeneration", dgdr.Generation)
 
-			r.Recorder.Event(dgdr, corev1.EventTypeWarning, EventReasonSpecChangeRejected,
-				fmt.Sprintf(MessageSpecChangeRejected, dgdr.Status.State))
+        r.Recorder.Event(dgdr, corev1.EventTypeWarning, EventReasonSpecChangeRejected,
+            fmt.Sprintf(MessageSpecChangeRejected, dgdr.Status.State))
 
-			// Keep the old observedGeneration to continue rejecting changes
-			// No state transition - stay in current state with old spec
-			return ctrl.Result{}, nil
-		}
-	}
-
+        // Keep the old observedGeneration to continue rejecting changes
+        // No state transition - stay in current state with old spec
+        return ctrl.Result{}, nil
+    }
+}
 	// State machine: handle different states
 	switch dgdr.Status.State {
 	case StateEmpty:
@@ -818,67 +818,45 @@ EOF
 `, ProfilingOutputPath, ProfilingOutputFile)},
 		}
 
-		// Build sidecar container that copies output to ConfigMap
-		outputConfigMapName := getOutputConfigMapName(dgdr)
 		sidecarContainer := corev1.Container{
 			Name:    ContainerNameOutputCopier,
 			Image:   SidecarImage,
 			Command: []string{"/bin/sh", "-c"},
 			Args: []string{fmt.Sprintf(`
-				set -e  # Exit on any error
-				set -o pipefail  # Exit on pipe failures
-				
-				echo "Waiting for profiling output..."
-				
-				# Wait for k8s_deploy.yaml to be created
-				while [ ! -f %s/%s ]; do 
-					sleep 2
-				done
-				
-				echo "Output file found, processing and creating ConfigMap..."
-				
-				# Get DGDR UID for ownerReference
-				DGDR_UID=$(kubectl get dgdr %s -n %s -o jsonpath='{.metadata.uid}')
-				DGDR_API_VERSION=$(kubectl get dgdr %s -n %s -o jsonpath='{.apiVersion}')
-				
-				# Extract spec from k8s_deploy.yaml and create full DGD with DGDR name
-				SPEC=$(kubectl create -f %s/%s --dry-run=client -o json | jq '.spec')
-				
-				# Create full DGD with DGDR name and extracted spec
-				cat > /tmp/dgd.yaml <<EOF
-apiVersion: nvidia.com/v1alpha1
-kind: DynamoGraphDeployment
+set -e
+set -o pipefail
+while [ ! -f %s/%s ]; do sleep 2; done
+
+DGDR_UID=$(kubectl get dynamographdeploymentrequests %s -n %s -o jsonpath='{.metadata.uid}')
+DGDR_API_VERSION=$(kubectl get dynamographdeploymentrequests %s -n %s -o jsonpath='{.apiVersion}')
+
+cat >/tmp/cm.yaml <<EOF
+apiVersion: v1
+kind: ConfigMap
 metadata:
   name: %s
-spec: 
+  namespace: %s
+  ownerReferences:
+  - apiVersion: "$DGDR_API_VERSION"
+    kind: DynamoGraphDeploymentRequest
+    name: %s
+    uid: "$DGDR_UID"
+    controller: true
+    blockOwnerDeletion: true
+data:
+  %s: |
 EOF
-				echo "$SPEC" | jq -r 'to_entries | .[] | "  \(.key): \(.value | tojson)"' >> /tmp/dgd.yaml
-				
-				# Create ConfigMap with the full DGD
-				kubectl create configmap %s \
-					--namespace=%s \
-					--from-file=%s=/tmp/dgd.yaml \
-					--dry-run=client -o json | \
-				jq '.metadata.ownerReferences = [{
-					"apiVersion": "'$DGDR_API_VERSION'",
-					"kind": "DynamoGraphDeploymentRequest",
-					"name": "%s",
-					"uid": "'$DGDR_UID'",
-					"controller": true,
-					"blockOwnerDeletion": true
-				}]' | \
-				kubectl apply -f -
-				
-				echo "Successfully saved DGD to ConfigMap %s with ownerReference"
-			`,
+sed 's/^/    /' %s/%s >> /tmp/cm.yaml
+kubectl apply -f /tmp/cm.yaml
+echo "Saved profiling output to ConfigMap %s"
+`,
 				ProfilingOutputPath, ProfilingOutputFile,
 				dgdr.Name, dgdr.Namespace,
 				dgdr.Name, dgdr.Namespace,
-				ProfilingOutputPath, ProfilingOutputFile,
-				dgdr.Name,
 				outputConfigMapName, dgdr.Namespace,
-				ProfilingOutputFile,
 				dgdr.Name,
+				ProfilingOutputFile,
+				ProfilingOutputPath, ProfilingOutputFile,
 				outputConfigMapName,
 			)},
 			VolumeMounts: []corev1.VolumeMount{{

@@ -44,4 +44,3 @@ spec:
   #   configMapRef:
   #     name: my-profiling-config
   #     key: disagg.yaml  # default is "disagg.yaml"
-
