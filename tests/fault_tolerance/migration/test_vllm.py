@@ -4,7 +4,6 @@
 import logging
 import os
 import shutil
-import time
 
 import pytest
 
@@ -16,11 +15,9 @@ from tests.utils.payloads import check_models_api
 # Import utilities from the refactored utils module
 from .utils import (
     DynamoFrontendProcess,
-    determine_worker_roles,
-    send_completion_request,
+    determine_request_receiving_worker,
     start_completion_request,
     validate_completion_response,
-    validate_openai_response,
     verify_migration_occurred,
 )
 
@@ -124,53 +121,31 @@ def test_request_migration_vllm_worker_failure(
 
         # Start worker1 first and wait for it to be ready
         logger.info("Starting worker 1...")
-        worker1 = DynamoWorkerProcess(request, "worker1")
+        with DynamoWorkerProcess(request, "worker1") as worker1:
+            logger.info(f"Worker 1 PID: {worker1.get_pid()}")
 
-        with worker1:
-            # Start worker2 after worker1 is ready
-            logger.info("Starting worker 2...")
-            worker2 = DynamoWorkerProcess(request, "worker2")
-
-            with worker2:
-                logger.info(f"Worker 1 PID: {worker1.get_pid()}")
+            with DynamoWorkerProcess(request, "worker2") as worker2:
                 logger.info(f"Worker 2 PID: {worker2.get_pid()}")
 
-                # Step 3: Send a test request to see which worker handles it
-                logger.info("Sending test request to determine worker assignment...")
-                test_response = send_completion_request("Who are you?", 100, timeout=60)
-                validate_openai_response(test_response)
-                logger.info("Test request completed successfully")
+                # Step 3: Send the request
+                request_thread, response_list = start_completion_request()
 
-                # Step 4: Determine worker roles based on test request handling
-                # Frontend must use round-robin for the detection to work correctly
-                primary_worker, backup_worker = determine_worker_roles(worker1, worker2)
+                # Step 4: Use polling to determine which worker received the request
+                worker, worker_name = determine_request_receiving_worker(
+                    worker1, worker2
+                )
 
-                # Step 5: Send the formal request (expected to be received by the primary worker)
+                # Step 5: Kill the worker that has the request
                 logger.info(
-                    f"Sending formal request - expected to be handled by {primary_worker[1]}"
+                    f"Killing {worker_name} with PID {worker.get_pid()} processing the request"
                 )
-                request_thread, response_queue = start_completion_request()
+                terminate_process_tree(worker.get_pid(), immediate_kill=True, timeout=0)
 
-                # Step 6: Wait 0.5 seconds after sending the formal request, then kill the primary worker
-                logger.info(
-                    f"Killing {primary_worker[1]} with PID {primary_worker[0].get_pid()}"
-                )
-                time.sleep(0.5)
-                terminate_process_tree(
-                    primary_worker[0].get_pid(), immediate_kill=True, timeout=0
-                )
+                # Step 6: Validate the completion response
+                validate_completion_response(request_thread, response_list)
 
-                # Step 7: Validate the completion response
-                logger.info("Waiting for formal request to complete")
-                validate_completion_response(request_thread, response_queue)
-
-                # Step 8: Verify migration occurred
-                logger.info("Checking for migration message in frontend logs")
+                # Step 7: Verify migration occurred
                 verify_migration_occurred(frontend)
-
-                logger.info(
-                    "Test completed successfully - migration is detected and the request was successful"
-                )
 
 
 @pytest.mark.vllm
@@ -195,59 +170,30 @@ def test_request_migration_vllm_graceful_shutdown(
         logger.info("Frontend started successfully")
 
         # Step 2: Start 2 workers sequentially
+        with DynamoWorkerProcess(request, "worker1") as worker1:
+            logger.info(f"Worker 1 PID: {worker1.get_pid()}")
 
-        # Start worker1 first and wait for it to be ready
-        logger.info("Starting worker 1...")
-        worker1 = DynamoWorkerProcess(request, "worker1")
-
-        with worker1:
-            # Start worker2 after worker1 is ready
-            logger.info("Starting worker 2...")
-            worker2 = DynamoWorkerProcess(request, "worker2")
-
-            with worker2:
-                logger.info(f"Worker 1 PID: {worker1.get_pid()}")
+            with DynamoWorkerProcess(request, "worker2") as worker2:
                 logger.info(f"Worker 2 PID: {worker2.get_pid()}")
 
-                # Step 3: Send a test request to see which worker handles it
-                logger.info("Sending test request to determine worker assignment...")
-                test_response = send_completion_request("Who are you?", 100, timeout=60)
-                validate_openai_response(test_response)
-                logger.info("Test request completed successfully")
+                # Step 3: Send the request
+                request_thread, response_list = start_completion_request()
 
-                # Step 4: Determine worker roles based on test request handling
-                # Frontend must use round-robin for the detection to work correctly
-                primary_worker, backup_worker = determine_worker_roles(worker1, worker2)
-
-                # Step 5: Send the formal request (expected to be received by the primary worker)
-                logger.info(
-                    f"Sending formal request - expected to be handled by {primary_worker[1]}"
+                # Step 4: Use polling to determine which worker received the request
+                worker, worker_name = determine_request_receiving_worker(
+                    worker1, worker2
                 )
-                request_thread, response_queue = start_completion_request()
 
-                # Step 6: Wait 0.5 seconds after sending the formal request, then gracefully shutdown the primary worker
+                # Step 5: Gracefully shutdown the worker that has the request
                 logger.info(
-                    f"Gracefully shutting down {primary_worker[1]} with PID {primary_worker[0].get_pid()}"
+                    f"Gracefully shutting down {worker_name} with PID {worker.get_pid()} processing the request"
                 )
-                time.sleep(0.5)
-                # Use immediate_kill=False to send SIGTERM first, allowing graceful shutdown
-                # Use timeout=10 to give the worker time to handle the shutdown gracefully
                 terminate_process_tree(
-                    primary_worker[0].get_pid(), immediate_kill=False, timeout=10
+                    worker.get_pid(), immediate_kill=False, timeout=10
                 )
 
-                # Step 7: Validate the completion response
-                logger.info(
-                    "Waiting for formal request to complete after graceful shutdown"
-                )
-                validate_completion_response(request_thread, response_queue)
+                # Step 6: Validate the completion response
+                validate_completion_response(request_thread, response_list)
 
-                # Step 8: Verify migration occurred during graceful shutdown
-                logger.info(
-                    "Checking for migration message in frontend logs after graceful shutdown"
-                )
+                # Step 7: Verify migration occurred during graceful shutdown
                 verify_migration_occurred(frontend)
-
-                logger.info(
-                    "Test completed successfully - graceful shutdown migration detected and request was successful"
-                )
