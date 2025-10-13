@@ -33,6 +33,14 @@ type SLASpec struct {
 	// TTFT is the target Time To First Token in milliseconds.
 	// +kubebuilder:validation:Required
 	TTFT int `json:"ttft"`
+	// ISL is the Input Sequence Length for profiling.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	ISL int `json:"isl"`
+	// OSL is the Output Sequence Length for profiling.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	OSL int `json:"osl"`
 }
 
 // GPUSpec defines optional GPU type specification.
@@ -40,6 +48,16 @@ type GPUSpec struct {
 	// Type specifies the GPU type (e.g., "h200", "h100", "a100").
 	// +kubebuilder:validation:Optional
 	Type string `json:"type,omitempty"`
+	// MinNumGPUsPerEngine specifies the minimum number of GPUs per engine for profiling.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=1
+	MinNumGPUsPerEngine int `json:"minNumGPUsPerEngine,omitempty"`
+	// MaxNumGPUsPerEngine specifies the maximum number of GPUs per engine for profiling.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=8
+	MaxNumGPUsPerEngine int `json:"maxNumGPUsPerEngine,omitempty"`
 }
 
 // ConfigMapKeySelector selects a key from a ConfigMap.

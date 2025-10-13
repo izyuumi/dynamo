@@ -23,8 +23,12 @@ spec:
   sla: # SLA profiling targets
     itl: 1500  # Inter-Token Latency target in milliseconds
     ttft: 100  # Time To First Token target in milliseconds
+    isl: 3000  # Input Sequence Length
+    osl: 150   # Output Sequence Length
   gpu: # optional
     type: h200
+    minNumGPUsPerEngine: 1  # default is 1
+    maxNumGPUsPerEngine: 8  # default is 8
   online: true # true for online profiler, false for AIC profiler
 
   # Optional: Automatically create DynamoGraphDeployment after profiling

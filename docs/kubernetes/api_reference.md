@@ -263,7 +263,7 @@ _Appears in:_
 | `online` _boolean_ | Online indicates whether to use online profiler (true) or AI Configurator (false).<br />When true, uses real deployment for profiling (2-4 hours).<br />When false, uses AI Configurator for fast profiling (20-30 seconds). | false |  |
 | `autoApply` _boolean_ | AutoApply indicates whether to automatically create a DynamoGraphDeployment<br />after profiling completes. If false, only the spec is generated in status. | false |  |
 | `deploymentOverrides` _[DeploymentOverridesSpec](#deploymentoverridesspec)_ | DeploymentOverrides allows overriding metadata for the auto-created DGD.<br />Only used when AutoApply is true. |  | Optional: {} <br /> |
-| `profilingConfig` _[ProfilingConfigSpec](#profilingconfigspec)_ | ProfilingConfig provides configuration for the profiling job.<br />Only used when Online is true. |  | Optional: {} <br /> |
+| `profilingConfig` _[ProfilingConfigSpec](#profilingconfigspec)_ | ProfilingConfig provides configuration for the profiling job.<br />Can be used for both online and offline (AIC) profiling. |  | Optional: {} <br /> |
 
 
 #### DynamoGraphDeploymentRequestStatus
@@ -337,6 +337,8 @@ _Appears in:_
 | Field | Description | Default | Validation |
 | --- | --- | --- | --- |
 | `type` _string_ | Type specifies the GPU type (e.g., "h200", "h100", "a100"). |  | Optional: {} <br /> |
+| `minNumGPUsPerEngine` _integer_ | MinNumGPUsPerEngine specifies the minimum number of GPUs per engine for profiling. | 1 | Minimum: 1 <br />Optional: {} <br /> |
+| `maxNumGPUsPerEngine` _integer_ | MaxNumGPUsPerEngine specifies the maximum number of GPUs per engine for profiling. | 8 | Minimum: 1 <br />Optional: {} <br /> |
 
 
 #### IngressSpec
@@ -449,6 +451,8 @@ _Appears in:_
 | --- | --- | --- | --- |
 | `itl` _integer_ | ITL is the target Inter-Token Latency in milliseconds. |  | Required: {} <br /> |
 | `ttft` _integer_ | TTFT is the target Time To First Token in milliseconds. |  | Required: {} <br /> |
+| `isl` _integer_ | ISL is the Input Sequence Length for profiling. |  | Minimum: 1 <br />Required: {} <br /> |
+| `osl` _integer_ | OSL is the Output Sequence Length for profiling. |  | Minimum: 1 <br />Required: {} <br /> |
 
 
 #### SharedMemorySpec

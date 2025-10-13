@@ -772,6 +772,18 @@ func (r *DynamoGraphDeploymentRequestReconciler) createProfilingJob(ctx context.
 			},
 		}
 
+		// Determine GPU range for profiling
+		minGPUs := 1
+		maxGPUs := 8
+		if dgdr.Spec.GPU != nil {
+			if dgdr.Spec.GPU.MinNumGPUsPerEngine > 0 {
+				minGPUs = dgdr.Spec.GPU.MinNumGPUsPerEngine
+			}
+			if dgdr.Spec.GPU.MaxNumGPUsPerEngine > 0 {
+				maxGPUs = dgdr.Spec.GPU.MaxNumGPUsPerEngine
+			}
+		}
+
 		if dgdr.Spec.Online {
 			// Online profiling: use regular profile_sla args
 			profilerArgs = []string{
@@ -779,9 +791,11 @@ func (r *DynamoGraphDeploymentRequestReconciler) createProfilingJob(ctx context.
 				"--backend", dgdr.Spec.Backend,
 				"--ttft", fmt.Sprintf("%d", dgdr.Spec.SLA.TTFT),
 				"--itl", fmt.Sprintf("%d", dgdr.Spec.SLA.ITL),
+				"--isl", fmt.Sprintf("%d", dgdr.Spec.SLA.ISL),
+				"--osl", fmt.Sprintf("%d", dgdr.Spec.SLA.OSL),
 				"--output-dir", ProfilingOutputPath,
-				"--min-num-gpus-per-engine", "1",
-				"--max-num-gpus-per-engine", "8",
+				"--min-num-gpus-per-engine", fmt.Sprintf("%d", minGPUs),
+				"--max-num-gpus-per-engine", fmt.Sprintf("%d", maxGPUs),
 			}
 
 			// Add config if provided
@@ -800,9 +814,11 @@ func (r *DynamoGraphDeploymentRequestReconciler) createProfilingJob(ctx context.
 				"--backend", dgdr.Spec.Backend,
 				"--ttft", fmt.Sprintf("%d", dgdr.Spec.SLA.TTFT),
 				"--itl", fmt.Sprintf("%d", dgdr.Spec.SLA.ITL),
+				"--isl", fmt.Sprintf("%d", dgdr.Spec.SLA.ISL),
+				"--osl", fmt.Sprintf("%d", dgdr.Spec.SLA.OSL),
 				"--output-dir", ProfilingOutputPath,
-				"--min-num-gpus-per-engine", "1",
-				"--max-num-gpus-per-engine", "8",
+				"--min-num-gpus-per-engine", fmt.Sprintf("%d", minGPUs),
+				"--max-num-gpus-per-engine", fmt.Sprintf("%d", maxGPUs),
 				"--use-ai-configurator",
 				"--aic-model-name", dgdr.Spec.ModelName,
 				"--aic-backend-version", "0.20.0", // TODO: don't hardcode this
