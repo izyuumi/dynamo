@@ -250,6 +250,45 @@ mod tests {
         assert_eq!(content, Some(text.trim().to_string()));
         assert_eq!(result.len(), 0);
     }
+
+    #[test]
+    fn test_parse_tool_calls_deepseek_v3_1_with_multiline_json() {
+        let text = r#"I'll help you understand this codebase. Let me start by exploring the structure and key
+  files to provide you with a comprehensive
+  explanation.<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>TodoWrite<｜tool▁sep｜>{"todos":
+  [{"content": "Explore the root directory structure", "status": "in_progress", "activeForm":
+   "Exploring the root directory structure"}, {"content": "Examine package.json and
+  configuration files", "status": "pending", "activeForm": "Examining package.json and
+  configuration files"}, {"content": "Analyze source code structure and key modules",
+  "status": "pending", "activeForm": "Analyzing source code structure and key modules"},
+  {"content": "Identify main entry points and architectural patterns", "status": "pending",
+  "activeForm": "Identifying main entry points and architectural patterns"}, {"content":
+  "Summarize the codebase purpose and functionality", "status": "pending", "activeForm":
+  "Summarizing the codebase purpose and
+  functionality"}]}<｜tool▁call▁end｜><｜tool▁calls▁end｜>"#;
+        let config = JsonParserConfig {
+            tool_call_start_tokens: vec!["<｜tool▁calls▁begin｜>".to_string()],
+            tool_call_end_tokens: vec!["<｜tool▁calls▁end｜>".to_string()],
+            ..Default::default()
+        };
+
+        println!("Testing text: {}", text);
+        println!("Contains tool_calls_begin: {}", text.contains("<｜tool▁calls▁begin｜>"));
+        println!("Contains tool_call_begin: {}", text.contains("<｜tool▁call▁begin｜>"));
+        println!("Contains tool_sep: {}", text.contains("<｜tool▁sep｜>"));
+
+        let (result, content) = parse_tool_calls_deepseek_v3_1(text, &config).unwrap();
+
+        println!("Result length: {}", result.len());
+        println!("Content: {:?}", content);
+
+        assert_eq!(result.len(), 1, "Should parse exactly 1 tool call");
+        let (name, args) = extract_name_and_args(result[0].clone());
+        assert_eq!(name, "TodoWrite");
+        assert!(args.get("todos").is_some());
+        let todos = args.get("todos").unwrap().as_array().unwrap();
+        assert_eq!(todos.len(), 5);
+    }
 }
 
 #[cfg(test)]
