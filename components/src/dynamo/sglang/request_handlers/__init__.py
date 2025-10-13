@@ -8,7 +8,7 @@ from .embedding import EmbeddingWorkerHandler
 from .handler_base import BaseWorkerHandler
 
 # LLM handlers
-from .llm import AggregatedWorkerHandler, DecodeWorkerHandler, PrefillWorkerHandler
+from .llm import DecodeWorkerHandler, PrefillWorkerHandler
 
 # Multimodal handlers
 from .multimodal import (
@@ -21,7 +21,6 @@ from .multimodal import (
 __all__ = [
     "BaseWorkerHandler",
     # LLM handlers
-    "AggregatedWorkerHandler",
     "DecodeWorkerHandler",
     "PrefillWorkerHandler",
     # Embedding handlers

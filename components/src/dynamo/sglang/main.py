@@ -21,7 +21,6 @@ from dynamo.sglang.health_check import (
 from dynamo.sglang.publisher import setup_sgl_metrics
 from dynamo.sglang.register import register_llm_with_readiness_gate
 from dynamo.sglang.request_handlers import (
-    AggregatedWorkerHandler,
     DecodeWorkerHandler,
     EmbeddingWorkerHandler,
     MultimodalEncodeWorkerHandler,
@@ -101,13 +100,9 @@ async def init(runtime: DistributedRuntime, config: Config):
     # Readiness gate: requests wait until model is registered
     ready_event = asyncio.Event()
 
-    if config.serving_mode == DisaggregationMode.DECODE:
-        handler = DecodeWorkerHandler(
-            component, engine, config, publisher, prefill_client, prefill_router_client
-        )
-    else:
-        # Aggregated mode
-        handler = AggregatedWorkerHandler(component, engine, config, publisher)
+    handler = DecodeWorkerHandler(
+        component, engine, config, publisher, prefill_client, prefill_router_client
+    )
 
     health_check_payload = SglangHealthCheckPayload(engine).to_dict()
 
