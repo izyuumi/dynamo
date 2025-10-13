@@ -28,8 +28,6 @@ pub use path::*;
 
 use super::utils::build_in_runtime;
 
-//pub use etcd::ConnectOptions as EtcdConnectOptions;
-
 /// ETCD Client
 #[derive(Clone)]
 pub struct Client {
@@ -97,16 +95,29 @@ impl Client {
 
         let ((client, lease_id), rt) = build_in_runtime(
             async move {
-                let client =
-                    etcd_client::Client::connect(config.etcd_url, config.etcd_connect_options)
-                        .await?;
+                let client = etcd_client::Client::connect(
+                    config.etcd_url.clone(),
+                    config.etcd_connect_options,
+                )
+                .await
+                .with_context(|| {
+                    format!(
+                        "Unable to connect to etcd server at {}. Check etcd server status",
+                        config.etcd_url.join(", ")
+                    )
+                })?;
 
                 let lease_id = if config.attach_lease {
                     let lease_client = client.lease_client();
 
                     let lease = create_lease(lease_client, 10, token)
                         .await
-                        .context("creating primary lease")?;
+                        .with_context(|| {
+                            format!(
+                                "Unable to create lease. Check etcd server status at {}",
+                                config.etcd_url.join(", ")
+                            )
+                        })?;
 
                     lease.id
                 } else {
@@ -179,9 +190,9 @@ impl Client {
             Ok(())
         } else {
             for resp in result.op_responses() {
-                tracing::warn!("kv_create etcd op response: {resp:?}");
+                tracing::warn!(response = ?resp, "kv_create etcd op response");
             }
-            Err(error!("failed to create key"))
+            Err(error!("Unable to create key. Check etcd server status"))
         }
     }
 
@@ -222,11 +233,17 @@ impl Client {
                 Some(response) => match response {
                     TxnOpResponse::Txn(response) => match response.succeeded() {
                         true => Ok(()),
-                        false => Err(error!("failed to create or validate key")),
+                        false => Err(error!(
+                            "Unable to create or validate key. Check etcd server status"
+                        )),
                     },
-                    _ => Err(error!("unexpected response type")),
+                    _ => Err(error!(
+                        "Unable to validate key operation. Check etcd server status"
+                    )),
                 },
-                None => Err(error!("failed to create or validate key")),
+                None => Err(error!(
+                    "Unable to create or validate key. Check etcd server status"
+                )),
             }
         }
     }
@@ -575,21 +592,21 @@ impl KvCache {
                             let key = String::from_utf8_lossy(kv.key()).to_string();
                             let value = kv.value().to_vec();
 
-                            tracing::debug!("KvCache update: {} = {:?}", key, value);
+                            tracing::trace!("KvCache update: {} = {:?}", key, value);
                             let mut cache_write = cache.write().await;
                             cache_write.insert(key, value);
                         }
                         WatchEvent::Delete(kv) => {
                             let key = String::from_utf8_lossy(kv.key()).to_string();
 
-                            tracing::debug!("KvCache delete: {}", key);
+                            tracing::trace!("KvCache delete: {}", key);
                             let mut cache_write = cache.write().await;
                             cache_write.remove(&key);
                         }
                     }
                 }
 
-                tracing::info!("KvCache watcher for prefix '{}' stopped", prefix);
+                tracing::debug!("KvCache watcher for prefix '{}' stopped", prefix);
             });
         }
 
@@ -711,7 +728,7 @@ mod tests {
 
         // Create a unique test prefix to avoid conflicts with other tests
         let test_id = uuid::Uuid::new_v4().to_string();
-        let prefix = format!("test_kv_cache_{}/", test_id);
+        let prefix = format!("v1/test_kv_cache_{}/", test_id);
 
         // Initial values
         let mut initial_values = HashMap::new();

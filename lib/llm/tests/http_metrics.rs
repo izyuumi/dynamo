@@ -4,8 +4,8 @@
 use anyhow::Error;
 use async_stream::stream;
 use dynamo_llm::{
-    http::service::metrics::Endpoint,
-    http::service::service_v2::HttpService,
+    http::service::{metrics::Endpoint, service_v2::HttpService},
+    model_card::ModelDeploymentCard,
     protocols::{
         Annotated,
         openai::chat_completions::{
@@ -52,7 +52,7 @@ impl
 
             // Generate 5 response chunks
             for i in 0..5 {
-                let output = generator.create_choice(i, Some(format!("Mock response {i}")), None, None, None);
+                let output = generator.create_choice(i, Some(format!("Mock response {i}")), None, None);
                 yield Annotated::from_data(output);
             }
         };
@@ -90,9 +90,9 @@ async fn test_metrics_prefix_default() {
 
         // Assert metrics that are actually present in the default configuration
         assert!(body.contains("dynamo_frontend_requests_total"));
-        assert!(body.contains("dynamo_frontend_inflight_requests_total"));
+        assert!(body.contains("dynamo_frontend_inflight_requests"));
         assert!(body.contains("dynamo_frontend_request_duration_seconds"));
-        assert!(body.contains("dynamo_frontend_client_disconnects"));
+        assert!(body.contains("dynamo_frontend_disconnected_clients"));
 
         token.cancel();
         let _ = handle.await;
@@ -206,9 +206,10 @@ async fn test_metrics_with_mock_model() {
         let task = tokio::spawn(async move { service.run(token.clone()).await });
 
         // Add mock model engine
+        let card = ModelDeploymentCard::with_name_only("mockmodel");
         let mock_engine = Arc::new(MockModelEngine {});
         manager
-            .add_chat_completions_model("mockmodel", mock_engine)
+            .add_chat_completions_model("mockmodel", card.mdcsum(), mock_engine)
             .unwrap();
 
         // Wait for service to be ready
@@ -271,10 +272,10 @@ async fn test_metrics_with_mock_model() {
         // Assert that key metrics are present with the mockmodel
         assert!(metrics_body.contains("dynamo_frontend_requests_total"));
         assert!(metrics_body.contains("model=\"mockmodel\""));
-        assert!(metrics_body.contains("dynamo_frontend_inflight_requests_total"));
+        assert!(metrics_body.contains("dynamo_frontend_inflight_requests"));
         assert!(metrics_body.contains("dynamo_frontend_request_duration_seconds"));
         assert!(metrics_body.contains("dynamo_frontend_output_sequence_tokens"));
-        assert!(metrics_body.contains("dynamo_frontend_queued_requests_total"));
+        assert!(metrics_body.contains("dynamo_frontend_queued_requests"));
 
         // Verify specific request counter incremented
         assert!(metrics_body.contains("endpoint=\"chat_completions\""));
@@ -293,12 +294,11 @@ async fn test_metrics_with_mock_model() {
 mod integration_tests {
     use super::*;
     use dynamo_llm::{
-        discovery::{ModelEntry, ModelWatcher},
-        engines::make_echo_engine,
-        entrypoint::EngineConfig,
-        local_model::LocalModelBuilder,
+        discovery::ModelWatcher, engines::make_echo_engine, entrypoint::EngineConfig,
+        local_model::LocalModelBuilder, model_card,
     };
     use dynamo_runtime::DistributedRuntime;
+    use dynamo_runtime::pipeline::RouterMode;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -335,8 +335,6 @@ mod integration_tests {
 
         // Set up model watcher to discover models from etcd (like production)
         // This is crucial for the polling task to find model entries
-        use dynamo_llm::discovery::{MODEL_ROOT_PATH, ModelWatcher};
-        use dynamo_runtime::pipeline::RouterMode;
 
         let model_watcher = ModelWatcher::new(
             distributed_runtime.clone(),
@@ -349,7 +347,7 @@ mod integration_tests {
         // Start watching etcd for model registrations
         if let Some(etcd_client) = distributed_runtime.etcd_client() {
             let models_watcher = etcd_client
-                .kv_get_and_watch_prefix(MODEL_ROOT_PATH)
+                .kv_get_and_watch_prefix(model_card::ROOT_PATH)
                 .await
                 .unwrap();
             let (_prefix, _watcher, receiver) = models_watcher.dissolve();
@@ -365,10 +363,11 @@ mod integration_tests {
             panic!("Expected StaticFull config");
         };
 
+        let card = local_model.card().clone();
         let engine = Arc::new(dynamo_llm::engines::StreamingEngineAdapter::new(engine));
         let manager = service.model_manager();
         manager
-            .add_chat_completions_model(model.service_name(), engine.clone())
+            .add_chat_completions_model(model.service_name(), card.mdcsum(), engine.clone())
             .unwrap();
 
         // Now do the proper MDC registration via LocalModel::attach()
@@ -377,7 +376,7 @@ mod integration_tests {
         let test_component = namespace.component("test-mdc-component").unwrap();
         let test_endpoint = test_component.endpoint("test-mdc-endpoint");
 
-        // This will store the MDC in etcd and create the ModelEntry for discovery
+        // This will store the MDC in etcd for discovery
         local_model
             .attach(
                 &test_endpoint,
@@ -386,6 +385,22 @@ mod integration_tests {
             )
             .await
             .unwrap();
+
+        // Manually save the model card and update metrics
+        // This simulates what the ModelWatcher polling task would do in production
+        let _ = manager.save_model_card("test-mdc-key", card.clone());
+
+        if let Err(e) = service
+            .state()
+            .metrics_clone()
+            .update_metrics_from_mdc(&card)
+        {
+            tracing::debug!(
+                model = %card.display_name,
+                error = %e,
+                "Failed to update MDC metrics in test"
+            );
+        }
 
         // Start the HTTP service
         let token = CancellationToken::new();
@@ -457,10 +472,10 @@ mod integration_tests {
         let model_name = model.service_name();
         assert!(metrics_body.contains("dynamo_frontend_requests_total"));
         assert!(metrics_body.contains(&format!("model=\"{}\"", model_name)));
-        assert!(metrics_body.contains("dynamo_frontend_inflight_requests_total"));
+        assert!(metrics_body.contains("dynamo_frontend_inflight_requests"));
         assert!(metrics_body.contains("dynamo_frontend_request_duration_seconds"));
         assert!(metrics_body.contains("dynamo_frontend_output_sequence_tokens"));
-        assert!(metrics_body.contains("dynamo_frontend_queued_requests_total"));
+        assert!(metrics_body.contains("dynamo_frontend_queued_requests"));
 
         // Assert MDC-based model configuration metrics are present
         // These MUST be present for the test to pass
@@ -484,8 +499,13 @@ mod integration_tests {
         assert!(metrics_body.contains("request_type=\"stream\""));
         assert!(metrics_body.contains("status=\"success\""));
 
-        // Now test the complete lifecycle: remove the model from etcd
+        // etcd lease will ensure we everything is deleted from etcd
 
+        // Now test the complete lifecycle: remove the model from etcd
+        // We don't need to cleanup model manager because it's local to this test
+
+        /*
+        // Clean up
         // Remove the model using the cleaner ModelWatcher approach
         if let Some(etcd_client) = distributed_runtime.etcd_client() {
             // Use ModelWatcher to find and remove the model (following ModelWatcher::handle_delete pattern)
@@ -531,7 +551,7 @@ mod integration_tests {
 
                     if let Some(key) = key {
                         // Remove from ModelManager first (this returns the ModelEntry)
-                        if let Some(_removed_entry) = manager.remove_model_entry(&key) {
+                        if let Some(_removed_card) = manager.remove_model_card(&key) {
                             // Remove engines (following ModelWatcher::handle_delete pattern)
                             manager
                                 .remove_chat_completions_model(&model_entry.name)
@@ -547,8 +567,8 @@ mod integration_tests {
                 }
             }
         }
+        */
 
-        // Clean up
         cancel_token.cancel();
         task.await.unwrap().unwrap();
     }

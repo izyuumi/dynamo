@@ -6,11 +6,10 @@ pub mod kserve_test {
     pub mod inference {
         tonic::include_proto!("inference");
     }
-    use dynamo_llm::discovery::ModelEntry;
     use dynamo_llm::local_model::runtime_config::ModelRuntimeConfig;
+    use dynamo_llm::model_card::ModelDeploymentCard;
     use dynamo_llm::model_type::{ModelInput, ModelType};
     use dynamo_llm::protocols::tensor;
-    use dynamo_runtime::protocols::EndpointId;
     use inference::grpc_inference_service_client::GrpcInferenceServiceClient;
     use inference::{
         DataType, ModelConfigRequest, ModelInferRequest, ModelInferResponse, ModelMetadataRequest,
@@ -281,61 +280,32 @@ pub mod kserve_test {
         let failure = Arc::new(AlwaysFailEngine {});
         let long_running = Arc::new(LongRunningEngine::new(1_000));
 
+        let mut card = ModelDeploymentCard::with_name_only("split");
+        card.model_type = ModelType::Completions;
+        card.model_input = ModelInput::Text;
         manager
-            .add_completions_model("split", split.clone())
+            .add_completions_model("split", card.mdcsum(), split.clone())
             .unwrap();
-        manager.save_model_entry(
-            "split",
-            ModelEntry {
-                name: "split".to_string(),
-                endpoint_id: EndpointId {
-                    namespace: "namespace".to_string(),
-                    component: "component".to_string(),
-                    name: "split".to_string(),
-                },
-                model_type: ModelType::Completions,
-                model_input: ModelInput::Text,
-                runtime_config: None,
-            },
-        );
+        let _ = manager.save_model_card("split", card.clone());
 
+        let mut card = ModelDeploymentCard::with_name_only("failure");
+        card.model_type = ModelType::Completions | ModelType::Chat;
+        card.model_input = ModelInput::Text;
         manager
-            .add_chat_completions_model("failure", failure.clone())
+            .add_chat_completions_model("failure", card.mdcsum(), failure.clone())
             .unwrap();
         manager
-            .add_completions_model("failure", failure.clone())
+            .add_completions_model("failure", card.mdcsum(), failure.clone())
             .unwrap();
-        manager.save_model_entry(
-            "failure",
-            ModelEntry {
-                name: "failure".to_string(),
-                endpoint_id: EndpointId {
-                    namespace: "namespace".to_string(),
-                    component: "component".to_string(),
-                    name: "failure".to_string(),
-                },
-                model_type: ModelType::Completions | ModelType::Chat,
-                model_input: ModelInput::Text,
-                runtime_config: None,
-            },
-        );
+        let _ = manager.save_model_card("failure", card);
+
+        let mut card = ModelDeploymentCard::with_name_only("long_running");
+        card.model_type = ModelType::Completions;
+        card.model_input = ModelInput::Text;
         manager
-            .add_completions_model("long_running", long_running.clone())
+            .add_completions_model("long_running", card.mdcsum(), long_running.clone())
             .unwrap();
-        manager.save_model_entry(
-            "long_running",
-            ModelEntry {
-                name: "long_running".to_string(),
-                endpoint_id: EndpointId {
-                    namespace: "namespace".to_string(),
-                    component: "component".to_string(),
-                    name: "long_running".to_string(),
-                },
-                model_type: ModelType::Completions,
-                model_input: ModelInput::Text,
-                runtime_config: None,
-            },
-        );
+        let _ = manager.save_model_card("long_running", card);
 
         (service, split, failure, long_running)
     }
@@ -1161,11 +1131,16 @@ pub mod kserve_test {
         text_input: inference::model_infer_request::InferInputTensor,
     ) {
         // add tensor model
+
+        // Failure, model registered as Tensor but does not provide model config (in runtime config)
+        let mut card = ModelDeploymentCard::with_name_only("tensor");
+        card.model_type = ModelType::TensorBased;
+        card.model_input = ModelInput::Tensor;
         let tensor = Arc::new(TensorEngine {});
         service_with_engines
             .0
             .model_manager()
-            .add_tensor_model("tensor", tensor.clone())
+            .add_tensor_model("tensor", card.mdcsum(), tensor.clone())
             .unwrap();
 
         // start server
@@ -1178,22 +1153,10 @@ pub mod kserve_test {
             version: "".into(),
         });
 
-        // Failure, model registered as Tensor but does not provide model config (in runtime config)
-        let entry = ModelEntry {
-            name: "tensor".to_string(),
-            endpoint_id: EndpointId {
-                namespace: "namespace".to_string(),
-                component: "component".to_string(),
-                name: "endpoint".to_string(),
-            },
-            model_type: ModelType::TensorBased,
-            model_input: ModelInput::Tensor,
-            runtime_config: None,
-        };
-        service_with_engines
+        let _ = service_with_engines
             .0
             .model_manager()
-            .save_model_entry("key", entry);
+            .save_model_card("key", card);
 
         let response = client.model_metadata(request).await;
         assert!(response.is_err());
@@ -1236,37 +1199,30 @@ pub mod kserve_test {
         service_with_engines
             .0
             .model_manager()
-            .remove_model_entry("key");
-        let entry = ModelEntry {
-            name: "tensor".to_string(),
-            endpoint_id: EndpointId {
-                namespace: "namespace".to_string(),
-                component: "component".to_string(),
-                name: "endpoint".to_string(),
-            },
-            model_type: ModelType::TensorBased,
-            model_input: ModelInput::Tensor,
-            runtime_config: Some(ModelRuntimeConfig {
-                tensor_model_config: Some(tensor::TensorModelConfig {
-                    name: "tensor".to_string(),
-                    inputs: vec![tensor::TensorMetadata {
-                        name: "input".to_string(),
-                        data_type: tensor::DataType::Bytes,
-                        shape: vec![1],
-                    }],
-                    outputs: vec![tensor::TensorMetadata {
-                        name: "output".to_string(),
-                        data_type: tensor::DataType::Bool,
-                        shape: vec![-1],
-                    }],
-                }),
-                ..Default::default()
+            .remove_model_card("key");
+        let mut card = ModelDeploymentCard::with_name_only("tensor");
+        card.model_type = ModelType::TensorBased;
+        card.model_input = ModelInput::Tensor;
+        card.runtime_config = ModelRuntimeConfig {
+            tensor_model_config: Some(tensor::TensorModelConfig {
+                name: "tensor".to_string(),
+                inputs: vec![tensor::TensorMetadata {
+                    name: "input".to_string(),
+                    data_type: tensor::DataType::Bytes,
+                    shape: vec![1],
+                }],
+                outputs: vec![tensor::TensorMetadata {
+                    name: "output".to_string(),
+                    data_type: tensor::DataType::Bool,
+                    shape: vec![-1],
+                }],
             }),
+            ..Default::default()
         };
-        service_with_engines
+        let _ = service_with_engines
             .0
             .model_manager()
-            .save_model_entry("key", entry);
+            .save_model_card("key", card);
 
         // Success
         let request = tonic::Request::new(ModelMetadataRequest {

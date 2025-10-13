@@ -1,6 +1,6 @@
 # GitOps Deployment with FluxCD
 
-This section describes how to use FluxCD for GitOps-based deployment of Dynamo inference graphs. GitOps enables you to manage your Dynamo deployments declaratively using Git as the source of truth. We'll use the [aggregated vLLM example](/components/backends/vllm/README.md) to demonstrate the workflow.
+This section describes how to use FluxCD for GitOps-based deployment of Dynamo inference graphs. GitOps enables you to manage your Dynamo deployments declaratively using Git as the source of truth. We'll use the [aggregated vLLM example](/docs/backends/vllm/README.md) to demonstrate the workflow.
 
 ## Prerequisites
 
@@ -30,6 +30,9 @@ kind: DynamoGraphDeployment
 metadata:
   name: llm-agg
 spec:
+  pvcs:
+    - name: vllm-model-storage
+      size: 100Gi
   services:
     Frontend:
       replicas: 1
@@ -47,10 +50,9 @@ spec:
       - name: SPECIFIC_ENV_VAR
         value: some_specific_value
       # Add PVC for model storage
-      pvc:
-        name: vllm-model-storage
-        mountPath: /models
-        size: 100Gi
+      volumeMounts:
+        - name: vllm-model-storage
+          mountPoint: /models
 ```
 
 Commit and push this file to your Git repository. FluxCD will detect the new CR and create the initial Dynamo deployment in your cluster.

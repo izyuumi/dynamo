@@ -32,7 +32,6 @@ pub mod sequence;
 pub mod subscriber;
 
 use crate::{
-    discovery::{MODEL_ROOT_PATH, ModelEntry},
     kv_router::{
         approx::ApproxKvIndexer,
         indexer::{
@@ -45,6 +44,7 @@ use crate::{
         subscriber::start_kv_router_background,
     },
     local_model::runtime_config::ModelRuntimeConfig,
+    model_card::{self, ModelDeploymentCard},
     preprocessor::PreprocessedRequest,
     protocols::common::llm_backend::LLMEngineOutput,
 };
@@ -247,9 +247,9 @@ impl KvRouter {
 
         let runtime_configs_watcher = watch_prefix_with_extraction(
             etcd_client,
-            MODEL_ROOT_PATH,
+            model_card::ROOT_PATH,
             key_extractors::lease_id,
-            |model_entry: ModelEntry| model_entry.runtime_config,
+            |card: ModelDeploymentCard| Some(card.runtime_config),
             cancellation_token.clone(),
         )
         .await?;
@@ -472,7 +472,7 @@ impl AsyncEngine<SingleIn<RouterRequest>, ManyOut<Annotated<RouterResponse>>, Er
 
 pub struct KvPushRouter {
     inner: PushRouter<PreprocessedRequest, Annotated<LLMEngineOutput>>,
-    chooser: Arc<KvRouter>,
+    pub chooser: Arc<KvRouter>,
 }
 
 impl KvPushRouter {
@@ -481,27 +481,6 @@ impl KvPushRouter {
         chooser: Arc<KvRouter>,
     ) -> Self {
         KvPushRouter { inner, chooser }
-    }
-
-    /// Find the best matching worker for the given tokens without updating states
-    pub async fn find_best_match(
-        &self,
-        tokens: &[u32],
-        router_config_override: Option<&RouterConfigOverride>,
-    ) -> Result<(i64, u32)> {
-        self.chooser
-            .find_best_match(None, tokens, router_config_override, false)
-            .await
-    }
-
-    /// Get potential prefill and decode loads for all workers
-    pub async fn get_potential_loads(&self, tokens: &[u32]) -> Result<Vec<PotentialLoad>> {
-        self.chooser.get_potential_loads(tokens).await
-    }
-
-    /// Dump all events from the KV router's indexer
-    pub async fn dump_events(&self) -> Result<Vec<RouterEvent>, KvRouterError> {
-        self.chooser.dump_events().await
     }
 }
 

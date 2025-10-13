@@ -30,7 +30,7 @@ bitflags! {
     /// Using bitflags avoids deep branching on a single enum variant,
     /// simplifies checks like `supports_chat()`, and enables efficient,
     /// type-safe combinations of multiple endpoint types within a single byte.
-    #[derive(Copy, Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+    #[derive(Copy, Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
     pub struct ModelType: u8 {
         const Chat = 1 << 0;
         const Completions = 1 << 1;
@@ -74,6 +74,25 @@ impl ModelType {
         result
     }
 
+    /// Decompose the bitflag into it's component units:
+    /// Chat | Completion -> [Chat, Completion]
+    pub fn units(&self) -> Vec<ModelType> {
+        let mut result = Vec::new();
+        if self.supports_chat() {
+            result.push(ModelType::Chat);
+        }
+        if self.supports_completions() {
+            result.push(ModelType::Completions);
+        }
+        if self.supports_embedding() {
+            result.push(ModelType::Embedding);
+        }
+        if self.supports_tensor() {
+            result.push(ModelType::TensorBased);
+        }
+        result
+    }
+
     /// Returns all endpoint types supported by this model type.
     /// This properly handles combinations like Chat | Completions.
     pub fn as_endpoint_types(&self) -> Vec<crate::endpoint_type::EndpointType> {
@@ -100,9 +119,10 @@ impl fmt::Display for ModelType {
     }
 }
 
-#[derive(Copy, Debug, Clone, Display, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Copy, Debug, Default, Clone, Display, Serialize, Deserialize, Eq, PartialEq)]
 pub enum ModelInput {
     /// Raw text input
+    #[default]
     Text,
     /// Pre-processed input
     Tokens,

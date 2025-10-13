@@ -257,6 +257,7 @@ impl Client {
         tokio::io::copy(&mut obj_reader, &mut buffer)
             .await
             .map_err(|e| anyhow::anyhow!("Failed reading object data: {e}"))?;
+        tracing::debug!("Downloaded {} bytes from {bucket_name}/{key}", buffer.len());
 
         // Deserialize from bincode
         let data = bincode::deserialize(&buffer)
@@ -648,6 +649,17 @@ impl NatsQueue {
         }
     }
 
+    /// List all consumer names for the stream
+    pub async fn list_consumers(&mut self) -> Result<Vec<String>> {
+        self.ensure_connection().await?;
+
+        if let Some(client) = &self.client {
+            client.list_consumers(&self.stream_name).await
+        } else {
+            Err(anyhow::anyhow!("Client not connected"))
+        }
+    }
+
     /// Enqueue a task using the provided data
     pub async fn enqueue_task(&mut self, task_data: Bytes) -> Result<()> {
         self.ensure_connection().await?;
@@ -919,8 +931,8 @@ impl DRTNatsClientPrometheusMetrics {
             &[],
         )?;
         let connects = drt.create_intgauge(
-            nats_metrics::CONNECTS,
-            "Total number of connections established by NATS client",
+            nats_metrics::CURRENT_CONNECTIONS,
+            "Current number of active connections for NATS client",
             &[],
         )?;
         let connection_state = drt.create_intgauge(

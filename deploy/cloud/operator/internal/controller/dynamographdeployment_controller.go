@@ -32,11 +32,13 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -61,6 +63,11 @@ type etcdStorage interface {
 	DeleteKeys(ctx context.Context, prefix string) error
 }
 
+// rbacManager interface for managing RBAC resources
+type rbacManager interface {
+	EnsureServiceAccountWithRBAC(ctx context.Context, targetNamespace, serviceAccountName, clusterRoleName string) error
+}
+
 // DynamoGraphDeploymentReconciler reconciles a DynamoGraphDeployment object
 type DynamoGraphDeploymentReconciler struct {
 	client.Client
@@ -69,6 +76,7 @@ type DynamoGraphDeploymentReconciler struct {
 	DockerSecretRetriever dockerSecretRetriever
 	ScaleClient           scale.ScalesGetter
 	MPISecretReplicator   *secret.SecretReplicator
+	RBACManager           rbacManager
 }
 
 // +kubebuilder:rbac:groups=nvidia.com,resources=dynamographdeployments,verbs=get;list;watch;create;update;patch;delete
@@ -155,6 +163,33 @@ type Resource interface {
 
 func (r *DynamoGraphDeploymentReconciler) reconcileResources(ctx context.Context, dynamoDeployment *nvidiacomv1alpha1.DynamoGraphDeployment) (State, Reason, Message, error) {
 	logger := log.FromContext(ctx)
+
+	// Ensure planner RBAC exists in cluster-wide mode
+	if r.Config.RestrictedNamespace == "" {
+		if r.RBACManager == nil {
+			return "", "", "", fmt.Errorf("RBAC manager not initialized in cluster-wide mode")
+		}
+		if r.Config.RBAC.PlannerClusterRoleName == "" {
+			return "", "", "", fmt.Errorf("planner ClusterRole name is required in cluster-wide mode")
+		}
+		if err := r.RBACManager.EnsureServiceAccountWithRBAC(
+			ctx,
+			dynamoDeployment.Namespace,
+			consts.PlannerServiceAccountName,
+			r.Config.RBAC.PlannerClusterRoleName,
+		); err != nil {
+			logger.Error(err, "Failed to ensure planner RBAC")
+			return "", "", "", fmt.Errorf("failed to ensure planner RBAC: %w", err)
+		}
+	}
+
+	// Reconcile top-level PVCs first
+	err := r.reconcilePVCs(ctx, dynamoDeployment)
+	if err != nil {
+		logger.Error(err, "Failed to reconcile top-level PVCs")
+		return "", "", "", fmt.Errorf("failed to reconcile top-level PVCs: %w", err)
+	}
+
 	// Orchestrator selection via single boolean annotation: nvidia.com/enable-grove
 	// Unset or not "false": Grove if available; else component mode
 	// "false": component mode (multinode -> LWS; single-node -> standard)
@@ -408,6 +443,68 @@ func (r *DynamoGraphDeploymentReconciler) reconcileDynamoComponentsDeployments(c
 	return r.checkResourcesReadiness(resources)
 }
 
+// reconcilePVC reconciles a single top-level PVC defined in the DynamoGraphDeployment spec
+func (r *DynamoGraphDeploymentReconciler) reconcilePVC(ctx context.Context, dynamoDeployment *nvidiacomv1alpha1.DynamoGraphDeployment, pvcName string, pvcConfig nvidiacomv1alpha1.PVC) (*corev1.PersistentVolumeClaim, error) {
+	logger := log.FromContext(ctx)
+
+	pvc := &corev1.PersistentVolumeClaim{}
+	pvcNamespacedName := types.NamespacedName{Name: pvcName, Namespace: dynamoDeployment.Namespace}
+	err := r.Get(ctx, pvcNamespacedName, pvc)
+	if err != nil && client.IgnoreNotFound(err) != nil {
+		logger.Error(err, "Unable to retrieve top-level PVC", "pvcName", pvcName)
+		return nil, err
+	}
+
+	// If PVC does not exist, create a new one
+	if err != nil {
+		if pvcConfig.Create == nil || !*pvcConfig.Create {
+			logger.Error(err, "Top-level PVC does not exist and create is not enabled", "pvcName", pvcName)
+			return nil, err
+		}
+
+		pvc = constructPVC(dynamoDeployment, pvcConfig)
+		if err := controllerutil.SetControllerReference(dynamoDeployment, pvc, r.Client.Scheme()); err != nil {
+			logger.Error(err, "Failed to set controller reference for top-level PVC", "pvcName", pvcName)
+			return nil, err
+		}
+
+		err = r.Create(ctx, pvc)
+		if err != nil {
+			logger.Error(err, "Failed to create top-level PVC", "pvcName", pvcName)
+			return nil, err
+		}
+		logger.Info("Top-level PVC created", "pvcName", pvcName, "namespace", dynamoDeployment.Namespace)
+	}
+
+	return pvc, nil
+}
+
+// reconcilePVCs reconciles all top-level PVCs defined in the DynamoGraphDeployment spec
+func (r *DynamoGraphDeploymentReconciler) reconcilePVCs(ctx context.Context, dynamoDeployment *nvidiacomv1alpha1.DynamoGraphDeployment) error {
+	logger := log.FromContext(ctx)
+
+	if dynamoDeployment.Spec.PVCs == nil {
+		return nil
+	}
+
+	for _, pvcConfig := range dynamoDeployment.Spec.PVCs {
+		if pvcConfig.Name == nil || *pvcConfig.Name == "" {
+			logger.Error(nil, "PVC not reconcilable: name is required", "pvcConfig", pvcConfig)
+			continue
+		}
+
+		pvcName := *pvcConfig.Name
+		logger.Info("Reconciling top-level PVC", "pvcName", pvcName, "namespace", dynamoDeployment.Namespace)
+
+		_, err := r.reconcilePVC(ctx, dynamoDeployment, pvcName, pvcConfig)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (r *DynamoGraphDeploymentReconciler) FinalizeResource(ctx context.Context, dynamoDeployment *nvidiacomv1alpha1.DynamoGraphDeployment) error {
 	// for now doing nothing
 	return nil
@@ -422,6 +519,13 @@ func (r *DynamoGraphDeploymentReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Named("dynamographdeployment").
 		Owns(&nvidiacomv1alpha1.DynamoComponentDeployment{}, builder.WithPredicates(predicate.Funcs{
 			// ignore creation cause we don't want to be called again after we create the deployment
+			CreateFunc:  func(ce event.CreateEvent) bool { return false },
+			DeleteFunc:  func(de event.DeleteEvent) bool { return true },
+			UpdateFunc:  func(de event.UpdateEvent) bool { return true },
+			GenericFunc: func(ge event.GenericEvent) bool { return true },
+		})).
+		Owns(&corev1.PersistentVolumeClaim{}, builder.WithPredicates(predicate.Funcs{
+			// ignore creation cause we don't want to be called again after we create the PVC
 			CreateFunc:  func(ce event.CreateEvent) bool { return false },
 			DeleteFunc:  func(de event.DeleteEvent) bool { return true },
 			UpdateFunc:  func(de event.UpdateEvent) bool { return true },

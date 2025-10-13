@@ -8,23 +8,27 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
+use rand::Rng as _;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
-use super::{KeyValueBucket, KeyValueStore, StorageError, StorageOutcome};
+use crate::storage::key_value_store::Key;
+
+use super::{KeyValueBucket, KeyValueStore, StoreError, StoreOutcome};
 
 #[derive(Clone)]
-pub struct MemoryStorage {
-    inner: Arc<MemoryStorageInner>,
+pub struct MemoryStore {
+    inner: Arc<MemoryStoreInner>,
+    connection_id: u64,
 }
 
-impl Default for MemoryStorage {
+impl Default for MemoryStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
-struct MemoryStorageInner {
+struct MemoryStoreInner {
     data: Mutex<HashMap<String, MemoryBucket>>,
     change_sender: UnboundedSender<(String, String)>,
     change_receiver: Mutex<UnboundedReceiver<(String, String)>>,
@@ -32,7 +36,7 @@ struct MemoryStorageInner {
 
 pub struct MemoryBucketRef {
     name: String,
-    inner: Arc<MemoryStorageInner>,
+    inner: Arc<MemoryStoreInner>,
 }
 
 struct MemoryBucket {
@@ -47,27 +51,28 @@ impl MemoryBucket {
     }
 }
 
-impl MemoryStorage {
+impl MemoryStore {
     pub fn new() -> Self {
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        MemoryStorage {
-            inner: Arc::new(MemoryStorageInner {
+        MemoryStore {
+            inner: Arc::new(MemoryStoreInner {
                 data: Mutex::new(HashMap::new()),
                 change_sender: tx,
                 change_receiver: Mutex::new(rx),
             }),
+            connection_id: rand::rng().random(),
         }
     }
 }
 
 #[async_trait]
-impl KeyValueStore for MemoryStorage {
+impl KeyValueStore for MemoryStore {
     async fn get_or_create_bucket(
         &self,
         bucket_name: &str,
-        // MemoryStorage doesn't respect TTL yet
+        // MemoryStore doesn't respect TTL yet
         _ttl: Option<Duration>,
-    ) -> Result<Box<dyn KeyValueBucket>, StorageError> {
+    ) -> Result<Box<dyn KeyValueBucket>, StoreError> {
         let mut locked_data = self.inner.data.lock().await;
         // Ensure the bucket exists
         locked_data
@@ -80,11 +85,11 @@ impl KeyValueStore for MemoryStorage {
         }))
     }
 
-    /// This operation cannot fail on MemoryStorage. Always returns Ok.
+    /// This operation cannot fail on MemoryStore. Always returns Ok.
     async fn get_bucket(
         &self,
         bucket_name: &str,
-    ) -> Result<Option<Box<dyn KeyValueBucket>>, StorageError> {
+    ) -> Result<Option<Box<dyn KeyValueBucket>>, StoreError> {
         let locked_data = self.inner.data.lock().await;
         match locked_data.get(bucket_name) {
             Some(_) => Ok(Some(Box::new(MemoryBucketRef {
@@ -94,57 +99,64 @@ impl KeyValueStore for MemoryStorage {
             None => Ok(None),
         }
     }
+
+    fn connection_id(&self) -> u64 {
+        self.connection_id
+    }
 }
 
 #[async_trait]
 impl KeyValueBucket for MemoryBucketRef {
     async fn insert(
         &self,
-        key: String,
-        value: String,
+        key: &Key,
+        value: &str,
         revision: u64,
-    ) -> Result<StorageOutcome, StorageError> {
+    ) -> Result<StoreOutcome, StoreError> {
         let mut locked_data = self.inner.data.lock().await;
         let mut b = locked_data.get_mut(&self.name);
         let Some(bucket) = b.as_mut() else {
-            return Err(StorageError::MissingBucket(self.name.to_string()));
+            return Err(StoreError::MissingBucket(self.name.to_string()));
         };
         let outcome = match bucket.data.entry(key.to_string()) {
             Entry::Vacant(e) => {
-                e.insert((revision, value.clone()));
-                let _ = self.inner.change_sender.send((key, value));
-                StorageOutcome::Created(revision)
+                e.insert((revision, value.to_string()));
+                let _ = self
+                    .inner
+                    .change_sender
+                    .send((key.to_string(), value.to_string()));
+                StoreOutcome::Created(revision)
             }
             Entry::Occupied(mut entry) => {
                 let (rev, _v) = entry.get();
                 if *rev == revision {
-                    StorageOutcome::Exists(revision)
+                    StoreOutcome::Exists(revision)
                 } else {
-                    entry.insert((revision, value));
-                    StorageOutcome::Created(revision)
+                    entry.insert((revision, value.to_string()));
+                    StoreOutcome::Created(revision)
                 }
             }
         };
         Ok(outcome)
     }
 
-    async fn get(&self, key: &str) -> Result<Option<bytes::Bytes>, StorageError> {
+    async fn get(&self, key: &Key) -> Result<Option<bytes::Bytes>, StoreError> {
         let locked_data = self.inner.data.lock().await;
         let Some(bucket) = locked_data.get(&self.name) else {
             return Ok(None);
         };
         Ok(bucket
             .data
-            .get(key)
+            .get(&key.0)
             .map(|(_, v)| bytes::Bytes::from(v.clone())))
     }
 
-    async fn delete(&self, key: &str) -> Result<(), StorageError> {
+    async fn delete(&self, key: &Key) -> Result<(), StoreError> {
         let mut locked_data = self.inner.data.lock().await;
         let Some(bucket) = locked_data.get_mut(&self.name) else {
-            return Err(StorageError::MissingBucket(self.name.to_string()));
+            return Err(StoreError::MissingBucket(self.name.to_string()));
         };
-        bucket.data.remove(key);
+        bucket.data.remove(&key.0);
         Ok(())
     }
 
@@ -153,7 +165,7 @@ impl KeyValueBucket for MemoryBucketRef {
     /// Caller takes the lock so only a single caller may use this at once.
     async fn watch(
         &self,
-    ) -> Result<Pin<Box<dyn futures::Stream<Item = bytes::Bytes> + Send + 'life0>>, StorageError>
+    ) -> Result<Pin<Box<dyn futures::Stream<Item = bytes::Bytes> + Send + 'life0>>, StoreError>
     {
         Ok(Box::pin(async_stream::stream! {
             // All the existing ones first
@@ -187,7 +199,7 @@ impl KeyValueBucket for MemoryBucketRef {
         }))
     }
 
-    async fn entries(&self) -> Result<HashMap<String, bytes::Bytes>, StorageError> {
+    async fn entries(&self) -> Result<HashMap<String, bytes::Bytes>, StoreError> {
         let locked_data = self.inner.data.lock().await;
         match locked_data.get(&self.name) {
             Some(bucket) => Ok(bucket
@@ -195,7 +207,7 @@ impl KeyValueBucket for MemoryBucketRef {
                 .iter()
                 .map(|(k, (_rev, v))| (k.to_string(), bytes::Bytes::from(v.clone())))
                 .collect()),
-            None => Err(StorageError::MissingBucket(self.name.clone())),
+            None => Err(StoreError::MissingBucket(self.name.clone())),
         }
     }
 }

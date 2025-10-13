@@ -688,8 +688,6 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 							},
 						},
 						Spec: v1alpha1.DynamoComponentDeploymentSpec{
-							DynamoComponent:  "test-lws-component",
-							DynamoTag:        "test-tag",
 							BackendFramework: string(dynamo.BackendFrameworkVLLM),
 							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
 								Envs: []corev1.EnvVar{
@@ -727,6 +725,11 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 								ExtraPodSpec: &dynamoCommon.ExtraPodSpec{
 									PodSpec: &corev1.PodSpec{
 										TerminationGracePeriodSeconds: ptr.To(int64(10)),
+										Containers: []corev1.Container{
+											{
+												Image: "another-image:latest",
+											},
+										},
 									},
 									MainContainer: &corev1.Container{
 										Image: "test-image:latest",
@@ -809,7 +812,10 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 								RestartPolicy: corev1.RestartPolicyAlways,
 								Containers: []corev1.Container{
 									{
-										Name:    "main",
+										Image: "another-image:latest",
+									},
+									{
+										Name:    commonconsts.MainContainerName,
 										Image:   "test-image:latest",
 										Command: []string{"sh", "-c"},
 										Args:    []string{"ray start --head --port=6379 && some dynamo command"},
@@ -879,7 +885,7 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 											TimeoutSeconds:   5,
 											PeriodSeconds:    10,
 											SuccessThreshold: 0,
-											FailureThreshold: 60,
+											FailureThreshold: 720,
 										},
 									},
 								},
@@ -920,7 +926,10 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 								RestartPolicy: corev1.RestartPolicyAlways,
 								Containers: []corev1.Container{
 									{
-										Name:    "main",
+										Image: "another-image:latest",
+									},
+									{
+										Name:    commonconsts.MainContainerName,
 										Image:   "test-image:latest",
 										Command: []string{"sh", "-c"},
 										Args:    []string{"ray start --address=$(LWS_LEADER_ADDRESS):6379 --block"},
@@ -979,7 +988,6 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 					dynamoComponentDeployment: &v1alpha1.DynamoComponentDeployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-lws-nil-id", Namespace: "default"},
 						Spec: v1alpha1.DynamoComponentDeploymentSpec{
-							DynamoComponent: "test-comp", DynamoTag: "test",
 							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
 								Multinode: &v1alpha1.MultinodeSpec{
 									NodeCount: 2,
@@ -1023,7 +1031,6 @@ func TestDynamoComponentDeploymentReconciler_generateLeaderWorkerSet(t *testing.
 					dynamoComponentDeployment: &v1alpha1.DynamoComponentDeployment{
 						ObjectMeta: metav1.ObjectMeta{Name: "test-lws-leader-err", Namespace: "default"},
 						Spec: v1alpha1.DynamoComponentDeploymentSpec{
-							DynamoComponent: "test-comp", DynamoTag: "test",
 							DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
 								Multinode: &v1alpha1.MultinodeSpec{
 									NodeCount: 2,
