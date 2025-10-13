@@ -99,9 +99,9 @@ func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName
 		var startRank string
 		switch role {
 		case RoleWorker:
-			startRank = "1"
+			startRank = fmt.Sprintf("$(( %d * (GROVE_PCLQ_POD_INDEX + 1) ))", dataParallelSizeLocal)
 		case RoleLeader:
-			startRank = "0"
+			startRank = "0" // leader start rank is always 0
 		}
 		container.Args = append(container.Args,
 			"--data-parallel-address", leaderHostname,
