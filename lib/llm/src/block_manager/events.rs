@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-#[cfg(test)]
-mod dynamo_integration_test;
-
 use std::sync::Arc;
 
 use super::block::registry::RegistrationHandle;
@@ -144,17 +141,50 @@ impl EventReleaseManager for NullEventManager {
     fn block_release(&self, _registration_handle: &RegistrationHandle) {}
 }
 
-/// Event manager that emits KV cache events to the router
+/// Event manager that emits KV cache events to the indexer.
 pub struct DynamoEventManager {
     event_id_counter: std::sync::atomic::AtomicU64,
+    /// KV event publisher for publishing events to the indexer
+    publisher: PublisherImpl,
+}
+
+/// Publisher implementation - can be real or mock for testing
+enum PublisherImpl {
+    Real(Arc<crate::kv_router::publisher::KvEventPublisher>),
+    #[cfg(any(test, feature = "testing-full"))]
+    Mock(tokio::sync::mpsc::UnboundedSender<crate::kv_router::protocols::KvCacheEvent>),
+}
+
+impl PublisherImpl {
+    fn publish(&self, event: crate::kv_router::protocols::KvCacheEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        match self {
+            PublisherImpl::Real(publisher) => publisher.publish(event).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+            #[cfg(any(test, feature = "testing-full"))]
+            PublisherImpl::Mock(tx) => tx.send(event).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+        }
+    }
 }
 
 impl DynamoEventManager {
-    /// Create a new DynamoEventManager
-    pub fn new() -> Arc<Self> {
+    /// Create a DynamoEventManager with a KV event publisher.
+    pub fn new(publisher: Arc<crate::kv_router::publisher::KvEventPublisher>) -> Arc<Self> {
         Arc::new(Self {
             event_id_counter: std::sync::atomic::AtomicU64::new(0),
+            publisher: PublisherImpl::Real(publisher),
         })
+    }
+
+    /// Create a test DynamoEventManager that uses channels instead of NATS.
+    /// Returns the manager and a receiver to verify emitted events.
+    #[cfg(any(test, feature = "testing-full"))]
+    pub fn new_test() -> (Arc<Self>, tokio::sync::mpsc::UnboundedReceiver<crate::kv_router::protocols::KvCacheEvent>) {
+        use tokio::sync::mpsc;
+        let (tx, rx) = mpsc::unbounded_channel();
+        let manager = Arc::new(Self {
+            event_id_counter: std::sync::atomic::AtomicU64::new(0),
+            publisher: PublisherImpl::Mock(tx),
+        });
+        (manager, rx)
     }
 
     fn next_event_id(&self) -> u64 {
@@ -195,8 +225,6 @@ impl EventPublisher for DynamoEventManager {
             })
             .collect();
 
-        let num_blocks = blocks.len();
-
         let store_data = KvCacheStoreData {
             parent_hash,
             blocks,
@@ -207,13 +235,10 @@ impl EventPublisher for DynamoEventManager {
             data: KvCacheEventData::Stored(store_data.clone()),
         };
 
-        tracing::info!(
-            event_id = event.event_id,
-            parent_hash = ?parent_hash,
-            num_blocks = num_blocks,
-            "📦 KV_CACHE_STORE: {} block(s) registered",
-            num_blocks,
-        );
+        // Publish to the indexer
+        if let Err(e) = self.publisher.publish(event) {
+            tracing::error!("Failed to publish STORED event to indexer: {}", e);
+        }
     }
 }
 
@@ -234,20 +259,17 @@ impl EventReleaseManager for DynamoEventManager {
             data: KvCacheEventData::Removed(remove_data),
         };
 
-        tracing::info!(
-            event_id = event.event_id,
-            sequence_hash = sequence_hash,
-            "🗑️  KV_CACHE_REMOVE: seq_hash={}",
-            sequence_hash,
-        );
+        // Publish to the indexer
+        if let Err(e) = self.publisher.publish(event) {
+            tracing::error!("Failed to publish REMOVED event to indexer: {}", e);
+        }
     }
 }
 
 #[cfg(test)]
 pub mod tests {
-    use crate::tokens::SequenceHash;
-
     use super::*;
+    use crate::tokens::SequenceHash;
 
     #[derive(Debug, PartialEq, Eq)]
     pub enum EventType {

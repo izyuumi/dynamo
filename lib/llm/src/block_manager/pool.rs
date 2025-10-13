@@ -15,6 +15,7 @@ use super::block::{
     private, registry::BlockRegistry,
 };
 use super::events::{EventManager, NullEventManager};
+use super::metrics::{BlockManagerMetrics, PoolMetrics};
 use super::storage::Storage;
 
 use crate::block_manager::CacheLevel;

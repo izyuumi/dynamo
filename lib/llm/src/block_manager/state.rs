@@ -20,6 +20,7 @@ use super::{
         OffloadFilters, OffloadManager, OffloadManagerConfig, filter::OffloadFilter,
         request::BlockResult,
     },
+    metrics::BlockManagerMetrics,
 };
 use derive_getters::Dissolve;
 use std::sync::Arc;

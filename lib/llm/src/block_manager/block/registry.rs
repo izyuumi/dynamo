@@ -294,7 +294,7 @@ mod tests {
         let (event_manager, mut rx) = MockEventManager::new();
 
         let publish_handle =
-            BlockRegistry::create_publish_handle(&sequence.blocks()[0], event_manager.clone(), crate::block_manager::storage::StorageType::System);
+            BlockRegistry::create_publish_handle(&sequence.blocks()[0], event_manager.clone());
 
         // no event should have been triggered
         assert!(rx.try_recv().is_err());
@@ -331,7 +331,7 @@ mod tests {
         let (event_manager, mut rx) = MockEventManager::new();
 
         let publish_handle =
-            BlockRegistry::create_publish_handle(block_to_test, event_manager.clone(), crate::block_manager::storage::StorageType::System);
+            BlockRegistry::create_publish_handle(block_to_test, event_manager.clone());
 
         // Remove the registration handle before dropping the publish handle
         let reg_handle = publish_handle.remove_handle();
@@ -379,8 +379,8 @@ mod tests {
         let (event_manager, mut rx) = MockEventManager::new();
         let mut publisher = event_manager.publisher();
 
-        let publish_handle1 = BlockRegistry::create_publish_handle(block1, event_manager.clone(), crate::block_manager::storage::StorageType::System);
-        let publish_handle2 = BlockRegistry::create_publish_handle(block2, event_manager.clone(), crate::block_manager::storage::StorageType::System);
+        let publish_handle1 = BlockRegistry::create_publish_handle(block1, event_manager.clone());
+        let publish_handle2 = BlockRegistry::create_publish_handle(block2, event_manager.clone());
 
         // Remove handles before adding to publisher
         let reg_handle1 = publish_handle1.remove_handle();
@@ -443,7 +443,7 @@ mod tests {
         let (event_manager, mut rx) = MockEventManager::new();
         let mut publisher = event_manager.publisher();
 
-        let publish_handle1 = BlockRegistry::create_publish_handle(block1, event_manager.clone(), crate::block_manager::storage::StorageType::System);
+        let publish_handle1 = BlockRegistry::create_publish_handle(block1, event_manager.clone());
 
         publisher.take_handle(publish_handle1);
 

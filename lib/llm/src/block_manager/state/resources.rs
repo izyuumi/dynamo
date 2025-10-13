@@ -24,9 +24,8 @@ impl Resources {
         let event_manager = if let Some(event_manager) = config.event_manager.clone() {
             tracing::info!("using explicitly provided event manager for KV block manager");
             event_manager
-        } else {
-            tracing::info!("using DynamoEventManager for KV block manager (logs KV cache events)");
-            crate::block_manager::events::DynamoEventManager::new()
+        } else if let Some(kv_event_publisher) = config.runtime.kv_event_publisher.clone() {
+            crate::block_manager::events::DynamoEventManager::new(kv_event_publisher)
         } else {
             tracing::info!("using NullEventManager for KV block manager (no event publishing)");
             crate::block_manager::events::NullEventManager::new()
