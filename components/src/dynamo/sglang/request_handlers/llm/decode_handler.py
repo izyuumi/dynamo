@@ -116,43 +116,82 @@ class DecodeWorkerHandler(BaseWorkerHandler):
         input_param = self._get_input_param(request)
 
         if self.serving_mode == DisaggregationMode.DECODE:
-            # request the bootstrap info from the target prefill worker
-            if (
+            # Check if prefill workers are available
+            has_prefill_router = (
                 self.prefill_router_client is not None
                 and self.prefill_router_client.instance_ids()
-            ):
-                token_ids = request["token_ids"]
-                stream = await self.prefill_router_client.generate(token_ids)
-                result = await anext(stream)
-                (
-                    worker_id,
-                    overlap,
-                ) = result.data()  # Returns tuple (worker_id, overlap_amount)
-                logging.info(f"Best prefill worker ID: {worker_id}, overlap: {overlap}")
+            )
+            has_prefill_client = (
+                self.prefill_client is not None and self.prefill_client.instance_ids()
+            )
 
-                prefill_stream = await self.prefill_client.direct(
-                    DisaggPreprocessedRequest(
-                        request=request,
-                        sampling_params=sampling_params,
-                    ).model_dump(),
-                    worker_id,
+            if not has_prefill_router and not has_prefill_client:
+                # No prefill workers found - provide helpful error message
+                logging.error(
+                    f"No prefill worker instances found for request {context.id()}. "
+                    "In disaggregated mode with SGLang, ensure:\n"
+                    "1. Prefill workers are running with --is-prefill-worker flag\n"
+                    "2. Prefill workers can connect to ETCD (check ETCD_ENDPOINT environment variable)\n"
+                    "3. Network connectivity exists between decode and prefill workers\n"
+                    "4. Prefill workers started successfully without errors"
                 )
-            else:
-                prefill_stream = await self.prefill_client.generate(
-                    DisaggPreprocessedRequest(
-                        request=request,
-                        sampling_params=sampling_params,
-                    ).model_dump(),
-                    context=context,
+                raise RuntimeError(
+                    "No prefill worker instances available. Check that prefill workers are running with "
+                    "--is-prefill-worker flag and can connect to ETCD."
                 )
 
-            bootstrap_info = None
-            async for info in prefill_stream:
-                bootstrap_info = info.data()
-                break
+            # request the bootstrap info from the target prefill worker
+            try:
+                if has_prefill_router:
+                    token_ids = request["token_ids"]
+                    stream = await self.prefill_router_client.generate(token_ids)
+                    result = await anext(stream)
+                    (
+                        worker_id,
+                        overlap,
+                    ) = result.data()  # Returns tuple (worker_id, overlap_amount)
+                    logging.info(
+                        f"Best prefill worker ID: {worker_id}, overlap: {overlap}"
+                    )
 
-            if not bootstrap_info:
-                raise RuntimeError("No bootstrap info received from prefill worker")
+                    prefill_stream = await self.prefill_client.direct(
+                        DisaggPreprocessedRequest(
+                            request=request,
+                            sampling_params=sampling_params,
+                        ).model_dump(),
+                        worker_id,
+                    )
+                else:
+                    prefill_stream = await self.prefill_client.generate(
+                        DisaggPreprocessedRequest(
+                            request=request,
+                            sampling_params=sampling_params,
+                        ).model_dump(),
+                        context=context,
+                    )
+
+                bootstrap_info = None
+                async for info in prefill_stream:
+                    bootstrap_info = info.data()
+                    break
+
+                if not bootstrap_info:
+                    raise RuntimeError("No bootstrap info received from prefill worker")
+
+            except Exception as e:
+                error_str = str(e)
+                if "no instances found" in error_str and "prefill" in error_str.lower():
+                    logging.error(
+                        f"Failed to connect to prefill workers for request {context.id()}. "
+                        "This indicates prefill workers are not available. "
+                        "In disaggregated SGLang mode, ensure:\n"
+                        "1. Prefill workers are running with --is-prefill-worker flag\n"
+                        "2. Prefill workers can connect to ETCD (check ETCD_ENDPOINT environment variable)\n"
+                        "3. Network connectivity exists between decode and prefill workers\n"
+                        "4. Prefill workers started successfully without errors\n"
+                        f"Original error: {e}"
+                    )
+                raise
 
             decode = await self.engine.async_generate(
                 **input_param,
