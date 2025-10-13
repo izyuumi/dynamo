@@ -121,6 +121,16 @@ spec:
                 gpu:
                   description: GPU defines optional GPU type specification.
                   properties:
+                    maxNumGPUsPerEngine:
+                      default: 8
+                      description: MaxNumGPUsPerEngine specifies the maximum number of GPUs per engine for profiling.
+                      minimum: 1
+                      type: integer
+                    minNumGPUsPerEngine:
+                      default: 1
+                      description: MinNumGPUsPerEngine specifies the minimum number of GPUs per engine for profiling.
+                      minimum: 1
+                      type: integer
                     type:
                       description: Type specifies the GPU type (e.g., "h200", "h100", "a100").
                       type: string
@@ -138,13 +148,13 @@ spec:
                 profilingConfig:
                   description: |-
                     ProfilingConfig provides configuration for the profiling job.
-                    Only used when Online is true.
+                    Can be used for both online and offline (AIC) profiling.
                   properties:
                     configMapRef:
                       description: |-
                         ConfigMapRef is a reference to a ConfigMap containing the profiling configuration.
                         The ConfigMap should contain a key (default: "disagg.yaml") with the configuration file.
-                        This is only used for online profiling.
+                        Can be used for both online and offline (AIC) profiling.
                       properties:
                         key:
                           default: disagg.yaml
@@ -160,14 +170,24 @@ spec:
                 sla:
                   description: SLA defines the Service Level Agreement profiling targets.
                   properties:
+                    isl:
+                      description: ISL is the Input Sequence Length for profiling.
+                      minimum: 1
+                      type: integer
                     itl:
                       description: ITL is the target Inter-Token Latency in milliseconds.
+                      type: integer
+                    osl:
+                      description: OSL is the Output Sequence Length for profiling.
+                      minimum: 1
                       type: integer
                     ttft:
                       description: TTFT is the target Time To First Token in milliseconds.
                       type: integer
                   required:
+                    - isl
                     - itl
+                    - osl
                     - ttft
                   type: object
               required:

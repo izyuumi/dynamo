@@ -26,10 +26,10 @@ spec:
     isl: 3000  # Input Sequence Length
     osl: 150   # Output Sequence Length
   gpu: # optional
-    type: h200
+    type: h200_sxm
     minNumGPUsPerEngine: 1  # default is 1
     maxNumGPUsPerEngine: 8  # default is 8
-  online: true # true for online profiler, false for AIC profiler
+  online: false # true for online profiler, false for AIC profiler
 
   # Optional: Automatically create DynamoGraphDeployment after profiling
   autoApply: true  # default is false
@@ -43,8 +43,8 @@ spec:
   #   annotations:
   #     description: "Auto-generated from DGDR"
 
-  # Optional: Profiling configuration (only for online profiling)
-  # profilingConfig:
-  #   configMapRef:
-  #     name: my-profiling-config
-  #     key: disagg.yaml  # default is "disagg.yaml"
+  # Currently required for both online and offline/AIC profiling, but will be removed in the future
+  profilingConfig:
+    configMapRef:
+      name: my-profiling-config
+      key: disagg.yaml  # default is "disagg.yaml"

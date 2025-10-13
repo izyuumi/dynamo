@@ -107,7 +107,7 @@ const (
 
 	// Volume paths
 	ProfilingOutputPath = "/output"
-	ProfilingOutputFile = "k8s_deploy.yaml"
+	ProfilingOutputFile = "config_with_planner.yaml"
 	ProfilingConfigPath = "/config"
 	ProfilingConfigFile = "disagg.yaml"
 
@@ -1015,7 +1015,7 @@ func (r *DynamoGraphDeploymentRequestReconciler) generateDGDSpec(ctx context.Con
 	// Parse YAML into full DynamoGraphDeployment object first to validate and get name
 	dgd := &nvidiacomv1alpha1.DynamoGraphDeployment{}
 	if err := yaml.Unmarshal([]byte(yamlContent), dgd); err != nil {
-		return fmt.Errorf("failed to parse k8s_deploy.yaml: %w", err)
+		return fmt.Errorf("failed to parse %s: %w", ProfilingOutputFile, err)
 	}
 
 	logger.Info("Parsed DGD from ConfigMap", "dgdName", dgd.Name)
