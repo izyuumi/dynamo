@@ -145,7 +145,7 @@ docker pull nvcr.io/nvidia/ai-dynamo/sglang-runtime:my-tag
 # run container using prebuild wheel
 ./container/run.sh --framework sglang -it
 # mount workspace for development
-./container/run.sh --framework sglang --mount-workspace
+./container/run.sh --framework sglang --mount-workspace -it
 ```
 
 </details>
