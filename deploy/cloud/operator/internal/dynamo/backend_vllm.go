@@ -96,7 +96,7 @@ func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName
 		leaderHostname := multinodeDeployer.GetLeaderHostname(serviceName)
 		dataParallelSizeLocal := getContainerGPUs(container)
 		// nodeRank, _ := multinodeDeployer.GetNodeRank()
-		startRank := fmt.Sprintf("$(( %d * (GROVE_PCLQ_POD_INDEX + 1) ))", dataParallelSizeLocal)
+		startRank := fmt.Sprintf("$(( %d * GROVE_PCLQ_POD_INDEX ))", dataParallelSizeLocal)
 		container.Args = append(container.Args,
 			"--data-parallel-address", leaderHostname,
 			"--data-parallel-size-local", strconv.FormatInt(dataParallelSizeLocal, 10),
