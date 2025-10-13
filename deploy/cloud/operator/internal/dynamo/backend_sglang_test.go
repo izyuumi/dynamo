@@ -118,6 +118,28 @@ func TestSGLangBackend_PythonCommandInjection(t *testing.T) {
 			description:       "Python version variants should be recognized",
 		},
 		{
+			name:              "absolute path python command supported",
+			numberOfNodes:     2,
+			role:              RoleWorker,
+			multinodeDeployer: &MockSimpleDeployer{},
+			initialCommand:    []string{"/usr/bin/python3.8"},
+			initialArgs:       []string{"-m", "dynamo.sglang", "--model", "llama"},
+			expectedCommand:   []string{"/usr/bin/python3.8"},
+			expectedArgs:      []string{"-m", "dynamo.sglang", "--model", "llama", "--dist-init-addr", "leader.example.com:29500", "--nnodes", "2", "--node-rank", "1"},
+			description:       "Absolute path Python commands should be recognized",
+		},
+		{
+			name:              "pyenv shims python command supported",
+			numberOfNodes:     2,
+			role:              RoleWorker,
+			multinodeDeployer: &MockShellDeployer{},
+			initialCommand:    []string{"/home/user/.pyenv/shims/python3.9"},
+			initialArgs:       []string{"-m", "dynamo.sglang"},
+			expectedCommand:   []string{"sh", "-c"},
+			expectedArgs:      []string{"exec /home/user/.pyenv/shims/python3.9 -m dynamo.sglang --dist-init-addr $(LEADER_HOST):29500 --nnodes 2 --node-rank $(WORKER_INDEX)"},
+			description:       "Pyenv shims Python paths should be recognized and wrapped with shell",
+		},
+		{
 			name:              "python command with module in command array - simple deployer",
 			numberOfNodes:     2,
 			role:              RoleWorker,
@@ -170,7 +192,7 @@ func TestSGLangBackend_PythonCommandInjection(t *testing.T) {
 				Args:    append([]string{}, tt.initialArgs...),
 			}
 
-			backend.UpdateContainer(container, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentOverridesSpec{}, "test-service", tt.multinodeDeployer)
+			backend.UpdateContainer(container, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentSharedSpec{}, "test-service", tt.multinodeDeployer)
 
 			if !reflect.DeepEqual(container.Command, tt.expectedCommand) {
 				t.Errorf("UpdateContainer() command = %v, want %v", container.Command, tt.expectedCommand)
@@ -295,7 +317,7 @@ func TestSGLangBackend_ShellCommandInjection(t *testing.T) {
 				Args:    append([]string{}, tt.initialArgs...),
 			}
 
-			backend.UpdateContainer(container, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentOverridesSpec{}, "test-service", tt.multinodeDeployer)
+			backend.UpdateContainer(container, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentSharedSpec{}, "test-service", tt.multinodeDeployer)
 
 			if !reflect.DeepEqual(container.Args, tt.expectedArgs) {
 				t.Errorf("UpdateContainer() args = %v, want %v", container.Args, tt.expectedArgs)
@@ -314,19 +336,40 @@ func TestIsPythonCommand(t *testing.T) {
 		cmd      string
 		expected bool
 	}{
+		// Base python commands
 		{"python", true},
 		{"python3", true},
 		{"python2", true},
 		{"python3.11", true},
 		{"python2.7", true},
 		{"python3.12.1", true},
+
+		// Absolute paths
+		{"/usr/bin/python", true},
+		{"/usr/bin/python3", true},
+		{"/usr/bin/python3.8", true},
+		{"/usr/bin/python2.7", true},
+		{"/opt/python/bin/python3.11", true},
+		{"/usr/local/bin/python3.12.1", true},
+		{"/home/user/.pyenv/shims/python3.9", true},
+		{"./python3", true},
+		{"../bin/python", true},
+		{"bin/python3.10", true},
+
+		// Invalid cases
 		{"java", false},
 		{"sh", false},
 		{"node", false},
-		{"python-config", false}, // hyphen makes it not a python interpreter
+		{"python-config", false},          // hyphen makes it not a python interpreter
+		{"/usr/bin/python-config", false}, // hyphen in absolute path
 		{"", false},
-		{"python ", false}, // space makes it invalid
-		{"pythonx", false}, // extra characters
+		{"python ", false},          // space makes it invalid
+		{"/usr/bin/python ", false}, // space in absolute path
+		{"pythonx", false},          // extra characters
+		{"/usr/bin/pythonx", false}, // extra characters in absolute path
+		{"/usr/bin/", false},        // empty filename
+		{"python/", false},          // directory, not executable
+		{"/usr/bin/python/", false}, // directory path
 	}
 
 	for _, tt := range tests {
@@ -448,7 +491,7 @@ func TestSGLangBackend_ProbeRemoval(t *testing.T) {
 				StartupProbe:   startupProbe,
 			}
 
-			backend.UpdateContainer(container, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentOverridesSpec{}, "test-service", tt.multinodeDeployer)
+			backend.UpdateContainer(container, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentSharedSpec{}, "test-service", tt.multinodeDeployer)
 
 			if tt.expectProbesRemoved {
 				if container.LivenessProbe != nil {
@@ -480,21 +523,19 @@ func TestSGLangBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 
 	tests := []struct {
 		name                       string
-		component                  *v1alpha1.DynamoComponentDeploymentOverridesSpec
+		component                  *v1alpha1.DynamoComponentDeploymentSharedSpec
 		volumeMounts               []corev1.VolumeMount
 		expectNoEnvVarChanges      bool
 		expectLoggedPartialSupport bool
 	}{
 		{
 			name: "SGLang backend with useAsCompilationCache volume mount",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: []v1alpha1.VolumeMount{
-						{
-							Name:                  "sglang-cache",
-							MountPoint:            "/cache/sglang",
-							UseAsCompilationCache: true,
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: []v1alpha1.VolumeMount{
+					{
+						Name:                  "sglang-cache",
+						MountPoint:            "/cache/sglang",
+						UseAsCompilationCache: true,
 					},
 				},
 			},
@@ -504,14 +545,12 @@ func TestSGLangBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 		},
 		{
 			name: "SGLang backend with useAsCompilationCache at custom volume mount",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: []v1alpha1.VolumeMount{
-						{
-							Name:                  "custom-cache",
-							MountPoint:            "/custom/cache/path",
-							UseAsCompilationCache: true,
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: []v1alpha1.VolumeMount{
+					{
+						Name:                  "custom-cache",
+						MountPoint:            "/custom/cache/path",
+						UseAsCompilationCache: true,
 					},
 				},
 			},
@@ -521,13 +560,11 @@ func TestSGLangBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 		},
 		{
 			name: "SGLang backend without useAsCompilationCache volume mount",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: []v1alpha1.VolumeMount{
-						{
-							Name:       "regular-volume",
-							MountPoint: "/data",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: []v1alpha1.VolumeMount{
+					{
+						Name:       "regular-volume",
+						MountPoint: "/data",
 					},
 				},
 			},
@@ -537,10 +574,8 @@ func TestSGLangBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 		},
 		{
 			name: "SGLang backend with no volume mounts",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: nil,
-				},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: nil,
 			},
 			volumeMounts:               []corev1.VolumeMount{},
 			expectNoEnvVarChanges:      true,

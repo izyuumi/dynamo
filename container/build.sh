@@ -115,7 +115,7 @@ NONE_BASE_IMAGE_TAG="25.01-cuda12.8-devel-ubuntu24.04"
 SGLANG_BASE_IMAGE="nvcr.io/nvidia/cuda-dl-base"
 SGLANG_BASE_IMAGE_TAG="25.01-cuda12.8-devel-ubuntu24.04"
 
-NIXL_REF=0.4.1
+NIXL_REF=0.6.0
 NIXL_UCX_REF=v1.19.0
 NIXL_UCX_EFA_REF=9d2b88a1f67faf9876f267658bd077b379b8bb76
 
@@ -327,6 +327,15 @@ get_options() {
         --sccache-region)
             if [ "$2" ]; then
                 SCCACHE_REGION=$2
+                shift
+            else
+                missing_requirement "$1"
+            fi
+            ;;
+
+        --vllm-max-jobs)
+            if [ "$2" ]; then
+                MAX_JOBS=$2
                 shift
             else
                 missing_requirement "$1"
@@ -706,6 +715,10 @@ fi
 
 if [ -n "${NIXL_UCX_REF}" ]; then
     BUILD_ARGS+=" --build-arg NIXL_UCX_REF=${NIXL_UCX_REF} "
+fi
+
+if [ -n "${MAX_JOBS}" ]; then
+    BUILD_ARGS+=" --build-arg MAX_JOBS=${MAX_JOBS} "
 fi
 
 # Add sccache build arguments

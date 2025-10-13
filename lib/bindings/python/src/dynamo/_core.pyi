@@ -12,8 +12,10 @@ from typing import (
     Tuple,
 )
 
-# Prometheus metric names are defined in a separate module
 from ._prometheus_names import prometheus_names
+
+# Import from specialized modules
+from .prometheus_metrics import RuntimeMetrics as PyRuntimeMetrics
 
 def log_message(level: str, message: str, module: str, file: str, line: int) -> None:
     """
@@ -89,6 +91,16 @@ class Namespace:
         """
         ...
 
+    @property
+    def metrics(self) -> PyRuntimeMetrics:
+        """
+        Get a PyRuntimeMetrics helper for creating Prometheus metrics.
+
+        Returns:
+            A PyRuntimeMetrics object that provides create_* methods for different metric types
+        """
+        ...
+
 class Component:
     """
     A component is a collection of endpoints
@@ -96,7 +108,7 @@ class Component:
 
     ...
 
-    def create_service(self) -> None:
+    async def create_service(self) -> None:
         """
         Create a service
         """
@@ -105,6 +117,16 @@ class Component:
     def endpoint(self, name: str) -> Endpoint:
         """
         Create an endpoint
+        """
+        ...
+
+    @property
+    def metrics(self) -> PyRuntimeMetrics:
+        """
+        Get a PyRuntimeMetrics helper for creating Prometheus metrics.
+
+        Returns:
+            A PyRuntimeMetrics object that provides create_* methods for different metric types
         """
         ...
 
@@ -140,6 +162,17 @@ class Endpoint:
         Return primary lease id. Currently, cannot set a different lease id.
         """
         ...
+
+    @property
+    def metrics(self) -> PyRuntimeMetrics:
+        """
+        Get a PyRuntimeMetrics helper for creating Prometheus metrics.
+
+        Returns:
+            A PyRuntimeMetrics object that provides create_* methods for different metric types
+        """
+        ...
+
 
 class Client:
     """
@@ -1129,103 +1162,6 @@ class ZmqKvEventListener:
         """
         ...
 
-class KvRouter:
-    """
-    A KV Router that decides which worker to use based on KV cache overlap.
-    This router tracks request states and manages KV cache distribution across workers.
-    """
-
-    def __init__(
-        self,
-        endpoint: Endpoint,
-        block_size: int,
-        kv_router_config: Optional[KvRouterConfig] = None,
-        consumer_uuid: Optional[str] = None,
-    ) -> None:
-        """
-        Create a new KvRouter instance.
-
-        Args:
-            endpoint: The endpoint to associate with this router
-            block_size: The KV cache block size
-            kv_router_config: Optional configuration for the KV router
-            consumer_uuid: Optional unique identifier for this router instance.
-                          If not provided, a UUID will be generated.
-        """
-        ...
-
-    async def find_best_match(
-        self,
-        request_id: str,
-        tokens: List[int],
-        *,
-        update_states: bool = False,
-        router_config_override: Optional[JsonLike] = None,
-    ) -> Tuple[int, int]:
-        """
-        Find the best matching worker for the given tokens.
-
-        Args:
-            request_id: Unique identifier for the request used for tracking
-            tokens: List of token IDs to find matches for
-            update_states: Whether to update router states for this request (default: False)
-            router_config_override: Optional router configuration override with fields:
-                - overlap_score_weight: Optional weight for overlap score
-                - router_temperature: Optional temperature for worker selection
-
-        Returns:
-            A tuple of (worker_id, overlap_blocks) where:
-                - worker_id: The ID of the best matching worker
-                - overlap_blocks: The number of overlapping blocks found
-        """
-        ...
-
-    async def add_request(
-        self,
-        request_id: str,
-        tokens: List[int],
-        overlap_blocks: int,
-        worker_id: int,
-    ) -> None:
-        """
-        Add a request to the router's tracking system.
-
-        Args:
-            request_id: Unique identifier for the request
-            tokens: List of token IDs for the request
-            overlap_blocks: Number of overlapping blocks found
-            worker_id: ID of the worker handling this request
-        """
-        ...
-
-    async def mark_prefill_completed(self, request_id: str) -> None:
-        """
-        Mark that prefill has been completed for a request.
-
-        Args:
-            request_id: The request ID to mark as prefill completed
-        """
-        ...
-
-    async def free(self, request_id: str) -> None:
-        """
-        Free resources associated with a request.
-
-        Args:
-            request_id: The request ID to free
-        """
-        ...
-
-    @property
-    def block_size(self) -> int:
-        """
-        Get the KV cache block size.
-
-        Returns:
-            The block size in tokens
-        """
-        ...
-
 class KvPushRouter:
     """
     A KV-aware push router that performs intelligent routing based on KV cache overlap.
@@ -1285,13 +1221,17 @@ class KvPushRouter:
         self,
         token_ids: List[int],
         router_config_override: Optional[JsonLike] = None,
+        request_id: Optional[str] = None,
     ) -> Tuple[int, int]:
         """
-        Find the best matching worker for the given tokens without updating states.
+        Find the best matching worker for the given tokens.
 
         Args:
             token_ids: List of token IDs to find matches for
             router_config_override: Optional router configuration override
+            request_id: Optional request ID. If provided, router states will be updated
+                       to track this request (active blocks, lifecycle events). If not
+                       provided, this is a query-only operation that doesn't affect state.
 
         Returns:
             A tuple of (worker_id, overlap_blocks) where:
@@ -1324,6 +1264,40 @@ class KvPushRouter:
 
         Returns:
             A JSON string containing all indexer events
+        """
+        ...
+
+    async def mark_prefill_complete(self, request_id: str) -> None:
+        """
+        Mark prefill as completed for a request.
+
+        This signals that the request has finished its prefill phase and is now
+        in the decode phase. Used to update router state for accurate load tracking.
+
+        Args:
+            request_id: The ID of the request that completed prefill
+
+        Note:
+            This is typically called automatically by the router when using the
+            `generate()` method. Only call this manually if you're using
+            `best_worker_id()` with `request_id` for custom routing.
+        """
+        ...
+
+    async def free(self, request_id: str) -> None:
+        """
+        Free a request by its ID, signaling the router to release resources.
+
+        This should be called when a request completes to update the router's
+        tracking of active blocks and ensure accurate load balancing.
+
+        Args:
+            request_id: The ID of the request to free
+
+        Note:
+            This is typically called automatically by the router when using the
+            `generate()` method. Only call this manually if you're using
+            `best_worker_id()` with `request_id` for custom routing.
         """
         ...
 
@@ -1380,6 +1354,11 @@ class VirtualConnectorClient:
         ...
 
 __all__ = [
-    # ... existing exports ...
-    "prometheus_names"
+    "Backend",
+    "Client",
+    "Component",
+    "Context",
+    "ModelDeploymentCard",
+    "OAIChatPreprocessor",
+    "prometheus_names",
 ]

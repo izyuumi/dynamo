@@ -21,7 +21,7 @@ func TestTRTLLMBackend_UpdateContainer(t *testing.T) {
 		numberOfNodes          int32
 		role                   Role
 		multinodeDeployer      MultinodeDeployer
-		component              *v1alpha1.DynamoComponentDeploymentOverridesSpec
+		component              *v1alpha1.DynamoComponentDeploymentSharedSpec
 		expectedVolumeMounts   []corev1.VolumeMount
 		expectedCommand        []string
 		expectedArgs           []string
@@ -36,7 +36,7 @@ func TestTRTLLMBackend_UpdateContainer(t *testing.T) {
 			numberOfNodes:          1,
 			role:                   RoleMain,
 			multinodeDeployer:      &GroveMultinodeDeployer{},
-			component:              &v1alpha1.DynamoComponentDeploymentOverridesSpec{},
+			component:              &v1alpha1.DynamoComponentDeploymentSharedSpec{},
 			expectedVolumeMounts:   []corev1.VolumeMount{},
 			expectedCommand:        []string{},
 			expectedArgs:           []string{"python3", "--model", "test"},
@@ -51,12 +51,10 @@ func TestTRTLLMBackend_UpdateContainer(t *testing.T) {
 			numberOfNodes:     3,
 			role:              RoleLeader,
 			multinodeDeployer: &GroveMultinodeDeployer{},
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					Resources: &common.Resources{
-						Requests: &common.ResourceItem{
-							GPU: "2",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Requests: &common.ResourceItem{
+						GPU: "2",
 					},
 				},
 			},
@@ -78,7 +76,7 @@ func TestTRTLLMBackend_UpdateContainer(t *testing.T) {
 			numberOfNodes:     3,
 			role:              RoleWorker,
 			multinodeDeployer: &GroveMultinodeDeployer{},
-			component:         &v1alpha1.DynamoComponentDeploymentOverridesSpec{},
+			component:         &v1alpha1.DynamoComponentDeploymentSharedSpec{},
 			expectedVolumeMounts: []corev1.VolumeMount{
 				{Name: mpiRunSecretName, MountPath: "/ssh-pk", ReadOnly: true},
 			},
@@ -107,12 +105,10 @@ func TestTRTLLMBackend_UpdateContainer(t *testing.T) {
 			numberOfNodes:     2,
 			role:              RoleLeader,
 			multinodeDeployer: &LWSMultinodeDeployer{},
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					Resources: &common.Resources{
-						Limits: &common.ResourceItem{
-							GPU: "1",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Limits: &common.ResourceItem{
+						GPU: "1",
 					},
 				},
 			},
@@ -345,12 +341,12 @@ func TestTRTLLMBackend_UpdatePodSpec(t *testing.T) {
 				Volumes: tt.initialVolumes,
 				Containers: []corev1.Container{
 					{
-						Name: "main",
+						Name: commonconsts.MainContainerName,
 						Env:  []corev1.EnvVar{},
 					},
 				},
 			}
-			component := &v1alpha1.DynamoComponentDeploymentOverridesSpec{}
+			component := &v1alpha1.DynamoComponentDeploymentSharedSpec{}
 
 			// Call UpdatePodSpec
 			backend.UpdatePodSpec(podSpec, tt.numberOfNodes, tt.role, component, "test-service")
@@ -550,7 +546,7 @@ func TestTRTLLMBackend_setupLeaderContainer(t *testing.T) {
 		numberOfNodes     int32
 		multinodeDeployer MultinodeDeployer
 		serviceName       string
-		component         *v1alpha1.DynamoComponentDeploymentOverridesSpec
+		component         *v1alpha1.DynamoComponentDeploymentSharedSpec
 		initialArgs       []string
 		initialCommand    []string
 		expected          string
@@ -560,12 +556,10 @@ func TestTRTLLMBackend_setupLeaderContainer(t *testing.T) {
 			numberOfNodes:     3,
 			multinodeDeployer: &GroveMultinodeDeployer{},
 			serviceName:       "test-service",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					Resources: &common.Resources{
-						Requests: &common.ResourceItem{
-							GPU: "2",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Requests: &common.ResourceItem{
+						GPU: "2",
 					},
 				},
 			},
@@ -578,40 +572,84 @@ func TestTRTLLMBackend_setupLeaderContainer(t *testing.T) {
 			numberOfNodes:     2,
 			multinodeDeployer: &LWSMultinodeDeployer{},
 			serviceName:       "worker",
-			component:         &v1alpha1.DynamoComponentDeploymentOverridesSpec{},
+			component:         &v1alpha1.DynamoComponentDeploymentSharedSpec{},
 			initialArgs:       []string{},
 			initialCommand:    []string{"python", "-m", "worker"},
 			expected:          "mkdir -p ~/.ssh && ls -la /ssh-pk/ && cp /ssh-pk/private.key ~/.ssh/id_rsa && cp /ssh-pk/private.key.pub ~/.ssh/id_rsa.pub && cp /ssh-pk/private.key.pub ~/.ssh/authorized_keys && chmod 600 ~/.ssh/id_rsa ~/.ssh/authorized_keys && chmod 644 ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys && printf 'Host *\\nIdentityFile ~/.ssh/id_rsa\\nStrictHostKeyChecking no\\nPort 2222\\n' > ~/.ssh/config && mpirun --oversubscribe -n 0 -H $(LWS_LEADER_ADDRESS),$(LWS_WORKER_1_ADDRESS) --mca pml ob1 --mca plm_rsh_args \"-p 2222 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa\" -x CUDA_VISIBLE_DEVICES -x HF_DATASETS_CACHE -x HF_ENDPOINT -x HF_HOME -x HF_TOKEN -x HOME -x HUGGING_FACE_HUB_TOKEN -x LD_LIBRARY_PATH -x MODEL_PATH -x NCCL_DEBUG -x NCCL_IB_DISABLE -x NCCL_P2P_DISABLE -x PATH -x PYTHONPATH -x TENSORRT_LLM_CACHE_DIR -x TOKENIZERS_PARALLELISM -x TRANSFORMERS_CACHE -x USER bash -c 'source /opt/dynamo/venv/bin/activate && trtllm-llmapi-launch python -m worker'",
 		},
 		{
-			name:              "Leader with both command and args (args take precedence)",
+			name:              "Leader with both command and args (shell command - args take precedence)",
 			numberOfNodes:     2,
 			multinodeDeployer: &GroveMultinodeDeployer{},
 			serviceName:       "test",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					Resources: &common.Resources{
-						Limits: &common.ResourceItem{
-							GPU: "1",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Limits: &common.ResourceItem{
+						GPU: "1",
 					},
 				},
 			},
 			initialArgs:    []string{"launch", "--config", "test.yaml"},
-			initialCommand: []string{"ignored-command"},
+			initialCommand: []string{"sh", "-c"},
 			expected:       "mkdir -p ~/.ssh && ls -la /ssh-pk/ && cp /ssh-pk/private.key ~/.ssh/id_rsa && cp /ssh-pk/private.key.pub ~/.ssh/id_rsa.pub && cp /ssh-pk/private.key.pub ~/.ssh/authorized_keys && chmod 600 ~/.ssh/id_rsa ~/.ssh/authorized_keys && chmod 644 ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys && printf 'Host *\\nIdentityFile ~/.ssh/id_rsa\\nStrictHostKeyChecking no\\nPort 2222\\n' > ~/.ssh/config && mpirun --oversubscribe -n 2 -H $(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-ldr-0.$(GROVE_HEADLESS_SERVICE),$(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-wkr-0.$(GROVE_HEADLESS_SERVICE) --mca pml ob1 --mca plm_rsh_args \"-p 2222 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa\" -x CUDA_VISIBLE_DEVICES -x HF_DATASETS_CACHE -x HF_ENDPOINT -x HF_HOME -x HF_TOKEN -x HOME -x HUGGING_FACE_HUB_TOKEN -x LD_LIBRARY_PATH -x MODEL_PATH -x NCCL_DEBUG -x NCCL_IB_DISABLE -x NCCL_P2P_DISABLE -x PATH -x PYTHONPATH -x TENSORRT_LLM_CACHE_DIR -x TOKENIZERS_PARALLELISM -x TRANSFORMERS_CACHE -x USER bash -c 'source /opt/dynamo/venv/bin/activate && trtllm-llmapi-launch launch --config test.yaml'",
+		},
+		{
+			name:              "Leader with python command and args (combined)",
+			numberOfNodes:     2,
+			multinodeDeployer: &GroveMultinodeDeployer{},
+			serviceName:       "test",
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Limits: &common.ResourceItem{
+						GPU: "1",
+					},
+				},
+			},
+			initialArgs:    []string{"-m", "dynamo.trtllm", "--model-path", "test"},
+			initialCommand: []string{"python3"},
+			expected:       "mkdir -p ~/.ssh && ls -la /ssh-pk/ && cp /ssh-pk/private.key ~/.ssh/id_rsa && cp /ssh-pk/private.key.pub ~/.ssh/id_rsa.pub && cp /ssh-pk/private.key.pub ~/.ssh/authorized_keys && chmod 600 ~/.ssh/id_rsa ~/.ssh/authorized_keys && chmod 644 ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys && printf 'Host *\\nIdentityFile ~/.ssh/id_rsa\\nStrictHostKeyChecking no\\nPort 2222\\n' > ~/.ssh/config && mpirun --oversubscribe -n 2 -H $(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-ldr-0.$(GROVE_HEADLESS_SERVICE),$(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-wkr-0.$(GROVE_HEADLESS_SERVICE) --mca pml ob1 --mca plm_rsh_args \"-p 2222 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa\" -x CUDA_VISIBLE_DEVICES -x HF_DATASETS_CACHE -x HF_ENDPOINT -x HF_HOME -x HF_TOKEN -x HOME -x HUGGING_FACE_HUB_TOKEN -x LD_LIBRARY_PATH -x MODEL_PATH -x NCCL_DEBUG -x NCCL_IB_DISABLE -x NCCL_P2P_DISABLE -x PATH -x PYTHONPATH -x TENSORRT_LLM_CACHE_DIR -x TOKENIZERS_PARALLELISM -x TRANSFORMERS_CACHE -x USER bash -c 'source /opt/dynamo/venv/bin/activate && trtllm-llmapi-launch python3 -m dynamo.trtllm --model-path test'",
+		},
+		{
+			name:              "Leader with python module command and separate args",
+			numberOfNodes:     2,
+			multinodeDeployer: &GroveMultinodeDeployer{},
+			serviceName:       "test",
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Limits: &common.ResourceItem{
+						GPU: "1",
+					},
+				},
+			},
+			initialArgs:    []string{"--model-path", "Qwen/Qwen3-0.6B", "--served-model-name", "Qwen/Qwen3-0.6B", "--disaggregation-mode", "prefill"},
+			initialCommand: []string{"python3", "-m", "dynamo.trtllm"},
+			expected:       "mkdir -p ~/.ssh && ls -la /ssh-pk/ && cp /ssh-pk/private.key ~/.ssh/id_rsa && cp /ssh-pk/private.key.pub ~/.ssh/id_rsa.pub && cp /ssh-pk/private.key.pub ~/.ssh/authorized_keys && chmod 600 ~/.ssh/id_rsa ~/.ssh/authorized_keys && chmod 644 ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys && printf 'Host *\\nIdentityFile ~/.ssh/id_rsa\\nStrictHostKeyChecking no\\nPort 2222\\n' > ~/.ssh/config && mpirun --oversubscribe -n 2 -H $(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-ldr-0.$(GROVE_HEADLESS_SERVICE),$(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-wkr-0.$(GROVE_HEADLESS_SERVICE) --mca pml ob1 --mca plm_rsh_args \"-p 2222 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa\" -x CUDA_VISIBLE_DEVICES -x HF_DATASETS_CACHE -x HF_ENDPOINT -x HF_HOME -x HF_TOKEN -x HOME -x HUGGING_FACE_HUB_TOKEN -x LD_LIBRARY_PATH -x MODEL_PATH -x NCCL_DEBUG -x NCCL_IB_DISABLE -x NCCL_P2P_DISABLE -x PATH -x PYTHONPATH -x TENSORRT_LLM_CACHE_DIR -x TOKENIZERS_PARALLELISM -x TRANSFORMERS_CACHE -x USER bash -c 'source /opt/dynamo/venv/bin/activate && trtllm-llmapi-launch python3 -m dynamo.trtllm --model-path Qwen/Qwen3-0.6B --served-model-name Qwen/Qwen3-0.6B --disaggregation-mode prefill'",
+		},
+		{
+			name:              "Leader with absolute path python command",
+			numberOfNodes:     2,
+			multinodeDeployer: &GroveMultinodeDeployer{},
+			serviceName:       "test",
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Limits: &common.ResourceItem{
+						GPU: "1",
+					},
+				},
+			},
+			initialArgs:    []string{"-m", "dynamo.trtllm", "--model-path", "test"},
+			initialCommand: []string{"/usr/bin/python3.8"},
+			expected:       "mkdir -p ~/.ssh && ls -la /ssh-pk/ && cp /ssh-pk/private.key ~/.ssh/id_rsa && cp /ssh-pk/private.key.pub ~/.ssh/id_rsa.pub && cp /ssh-pk/private.key.pub ~/.ssh/authorized_keys && chmod 600 ~/.ssh/id_rsa ~/.ssh/authorized_keys && chmod 644 ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys && printf 'Host *\\nIdentityFile ~/.ssh/id_rsa\\nStrictHostKeyChecking no\\nPort 2222\\n' > ~/.ssh/config && mpirun --oversubscribe -n 2 -H $(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-ldr-0.$(GROVE_HEADLESS_SERVICE),$(GROVE_PCSG_NAME)-$(GROVE_PCSG_INDEX)-test-wkr-0.$(GROVE_HEADLESS_SERVICE) --mca pml ob1 --mca plm_rsh_args \"-p 2222 -o StrictHostKeyChecking=no -i ~/.ssh/id_rsa\" -x CUDA_VISIBLE_DEVICES -x HF_DATASETS_CACHE -x HF_ENDPOINT -x HF_HOME -x HF_TOKEN -x HOME -x HUGGING_FACE_HUB_TOKEN -x LD_LIBRARY_PATH -x MODEL_PATH -x NCCL_DEBUG -x NCCL_IB_DISABLE -x NCCL_P2P_DISABLE -x PATH -x PYTHONPATH -x TENSORRT_LLM_CACHE_DIR -x TOKENIZERS_PARALLELISM -x TRANSFORMERS_CACHE -x USER bash -c 'source /opt/dynamo/venv/bin/activate && trtllm-llmapi-launch /usr/bin/python3.8 -m dynamo.trtllm --model-path test'",
 		},
 		{
 			name:              "Leader with all environment variables forwarded",
 			numberOfNodes:     2,
 			multinodeDeployer: &GroveMultinodeDeployer{},
 			serviceName:       "test",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					Resources: &common.Resources{
-						Requests: &common.ResourceItem{
-							GPU: "1",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Requests: &common.ResourceItem{
+						GPU: "1",
 					},
 				},
 			},
@@ -624,12 +662,10 @@ func TestTRTLLMBackend_setupLeaderContainer(t *testing.T) {
 			numberOfNodes:     2,
 			multinodeDeployer: &GroveMultinodeDeployer{},
 			serviceName:       "test",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					Resources: &common.Resources{
-						Requests: &common.ResourceItem{
-							GPU: "1",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				Resources: &common.Resources{
+					Requests: &common.ResourceItem{
+						GPU: "1",
 					},
 				},
 			},
@@ -820,21 +856,19 @@ func TestTRTLLMBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 
 	tests := []struct {
 		name                       string
-		component                  *v1alpha1.DynamoComponentDeploymentOverridesSpec
+		component                  *v1alpha1.DynamoComponentDeploymentSharedSpec
 		volumeMounts               []corev1.VolumeMount
 		expectNoEnvVarChanges      bool
 		expectLoggedPartialSupport bool
 	}{
 		{
 			name: "TensorRT-LLM backend with useAsCompilationCache volume mount",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: []v1alpha1.VolumeMount{
-						{
-							Name:                  "trtllm-cache",
-							MountPoint:            "/cache/trtllm",
-							UseAsCompilationCache: true,
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: []v1alpha1.VolumeMount{
+					{
+						Name:                  "trtllm-cache",
+						MountPoint:            "/cache/trtllm",
+						UseAsCompilationCache: true,
 					},
 				},
 			},
@@ -844,14 +878,12 @@ func TestTRTLLMBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 		},
 		{
 			name: "TensorRT-LLM backend with useAsCompilationCache at custom mount point",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: []v1alpha1.VolumeMount{
-						{
-							Name:                  "custom-cache",
-							MountPoint:            "/custom/cache/path",
-							UseAsCompilationCache: true,
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: []v1alpha1.VolumeMount{
+					{
+						Name:                  "custom-cache",
+						MountPoint:            "/custom/cache/path",
+						UseAsCompilationCache: true,
 					},
 				},
 			},
@@ -861,13 +893,11 @@ func TestTRTLLMBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 		},
 		{
 			name: "TensorRT-LLM backend without useAsCompilationCache",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: []v1alpha1.VolumeMount{
-						{
-							Name:       "regular-volume",
-							MountPoint: "/data",
-						},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: []v1alpha1.VolumeMount{
+					{
+						Name:       "regular-volume",
+						MountPoint: "/data",
 					},
 				},
 			},
@@ -877,10 +907,8 @@ func TestTRTLLMBackend_UpdateContainer_UseAsCompilationCache(t *testing.T) {
 		},
 		{
 			name: "TensorRT-LLM backend with no volume mounts",
-			component: &v1alpha1.DynamoComponentDeploymentOverridesSpec{
-				DynamoComponentDeploymentSharedSpec: v1alpha1.DynamoComponentDeploymentSharedSpec{
-					VolumeMounts: nil,
-				},
+			component: &v1alpha1.DynamoComponentDeploymentSharedSpec{
+				VolumeMounts: nil,
 			},
 			volumeMounts:               []corev1.VolumeMount{},
 			expectNoEnvVarChanges:      true,
