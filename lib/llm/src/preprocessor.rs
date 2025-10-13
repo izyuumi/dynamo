@@ -23,8 +23,6 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::{collections::HashMap, pin::Pin, sync::Arc};
 use tracing;
 
-// Stream recording imports
-
 use crate::model_card::{ModelDeploymentCard, ModelInfo};
 use crate::preprocessor::prompt::OAIChatLikeRequest;
 use crate::protocols::common::preprocessor::PreprocessedRequestBuilder;
@@ -96,15 +94,12 @@ impl LLMMetricAnnotation {
     }
 }
 
-// Recording types moved to `stream_recording` module behind the `stream-recording` feature
-
 // Reasoning State for reasoning parsing transformation step
 struct ReasoningState {
     stream: Pin<Box<dyn Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>> + Send>>,
     reasoning_parser: Option<Box<dyn ReasoningParser>>,
 }
 
-#[derive(Clone)]
 pub struct OpenAIPreprocessor {
     mdcsum: String,
     formatter: Arc<dyn OAIPromptFormatter>,
@@ -805,24 +800,6 @@ impl
             context.clone(),
         );
 
-        // Collect raw chunks after transform_postprocessor_stream for recording
-        // Only when the `stream-recording` feature is enabled
-        #[cfg(feature = "stream-recording")]
-        let (stream, raw_chunks): (
-            Pin<Box<dyn Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>> + Send>>,
-            Option<Vec<Annotated<NvCreateChatCompletionStreamResponse>>>,
-        ) = {
-            use futures::stream::StreamExt;
-            let items: Vec<_> = stream.collect().await;
-            let raw_chunks = items.clone();
-            (Box::pin(futures::stream::iter(items)), Some(raw_chunks))
-        };
-
-        #[cfg(not(feature = "stream-recording"))]
-        let stream = Box::pin(stream) as Pin<
-            Box<dyn Stream<Item = Annotated<NvCreateChatCompletionStreamResponse>> + Send>,
-        >;
-
         // Try to parse reasoning content only if parser is configured
         let should_parse_reasoning = self.runtime_config.reasoning_parser.is_some();
 
@@ -833,13 +810,13 @@ impl
         // Future Solution:
         // To address the limitation if needed in future: move this step before transform_postprocessor_stream and add new field of reasoning_content to the backend output
         // Use backend_output.reasoning_content field to fill out the deltas.
-        let stream = if should_parse_reasoning {
+        let stream: Pin<Box<dyn Stream<Item = _> + Send>> = if should_parse_reasoning {
             Box::pin(Self::parse_reasoning_content_from_stream(
                 stream,
                 self.runtime_config.reasoning_parser.clone().unwrap(), // Safety: We already checked that parser is some, so gtg
-            )) as Pin<Box<dyn Stream<Item = _> + Send>>
+            ))
         } else {
-            Box::pin(stream) as Pin<Box<dyn Stream<Item = _> + Send>>
+            Box::pin(stream)
         };
 
         // Check if tools are present and if we should apply jail
@@ -863,20 +840,6 @@ impl
         } else {
             Box::pin(stream)
         };
-
-        // Stream Recording: write combined content after jail processing
-        // Only when the `stream-recording` feature is enabled
-        #[cfg(feature = "stream-recording")]
-        let transformed_stream: Pin<Box<dyn Stream<Item = _> + Send>> =
-            crate::stream_recording::record_stream_if_enabled(
-                &request_id,
-                transformed_stream,
-                raw_chunks,
-            )
-            .await;
-
-        #[cfg(not(feature = "stream-recording"))]
-        let transformed_stream: Pin<Box<dyn Stream<Item = _> + Send>> = transformed_stream;
 
         // Step 4: Apply audit aggregation strategy
         let final_stream = if let Some(mut audit) = audit_handle {
