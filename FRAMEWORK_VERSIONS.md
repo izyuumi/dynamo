@@ -46,10 +46,10 @@ This document tracks the major dependencies and versions used in the NVIDIA Dyna
 - **Base Image Tag**: `25.01-cuda12.8-devel-ubuntu24.04`
 - **Description**: NVIDIA CUDA development environment
 
-### CUDA Runtime Image
-- **Version**: CUDA 12.8.1
-- **Runtime Image Tag**: `12.8.1-runtime-ubuntu24.04`
+### CUDA Runtime Images
 - **Description**: NVIDIA CUDA runtime environment for production deployments
+- **Default**: CUDA 12.8.1 (`12.8.1-runtime-ubuntu24.04`)
+- **TensorRT-LLM**: CUDA 12.9.1 (`12.9.1-runtime-ubuntu24.04`)
 
 ## Framework-Specific Configurations
 
