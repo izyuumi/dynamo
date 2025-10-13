@@ -156,11 +156,18 @@ enum PublisherImpl {
 }
 
 impl PublisherImpl {
-    fn publish(&self, event: crate::kv_router::protocols::KvCacheEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn publish(
+        &self,
+        event: crate::kv_router::protocols::KvCacheEvent,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match self {
-            PublisherImpl::Real(publisher) => publisher.publish(event).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+            PublisherImpl::Real(publisher) => publisher
+                .publish(event)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
             #[cfg(any(test, feature = "testing-full"))]
-            PublisherImpl::Mock(tx) => tx.send(event).map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
+            PublisherImpl::Mock(tx) => tx
+                .send(event)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>),
         }
     }
 }
@@ -177,7 +184,10 @@ impl DynamoEventManager {
     /// Create a test DynamoEventManager that uses channels instead of NATS.
     /// Returns the manager and a receiver to verify emitted events.
     #[cfg(any(test, feature = "testing-full"))]
-    pub fn new_test() -> (Arc<Self>, tokio::sync::mpsc::UnboundedReceiver<crate::kv_router::protocols::KvCacheEvent>) {
+    pub fn new_test() -> (
+        Arc<Self>,
+        tokio::sync::mpsc::UnboundedReceiver<crate::kv_router::protocols::KvCacheEvent>,
+    ) {
         use tokio::sync::mpsc;
         let (tx, rx) = mpsc::unbounded_channel();
         let manager = Arc::new(Self {

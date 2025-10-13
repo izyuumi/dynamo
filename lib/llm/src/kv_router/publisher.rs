@@ -54,7 +54,10 @@ enum KvEventSource {
 impl std::fmt::Debug for KvEventSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KvEventSource::Zmq { .. } => f.debug_struct("Zmq").field("zmq_handle", &"<JoinHandle>").finish(),
+            KvEventSource::Zmq { .. } => f
+                .debug_struct("Zmq")
+                .field("zmq_handle", &"<JoinHandle>")
+                .finish(),
         }
     }
 }
@@ -207,9 +210,10 @@ async fn start_event_processor<P: EventPublisher + Send + Sync + 'static>(
                 };
 
                 // Encapsulate in a router event and publish.
+                tracing::trace!("Event processor for worker_id {} processing event: {:?}", worker_id, event.data);
                 let router_event = RouterEvent::new(worker_id, event);
                 if let Err(e) = publisher.publish(QUEUE_NAME, &router_event).await {
-                    tracing::error!("Failed to publish event to NATS: {}", e);
+                    tracing::error!("Failed to publish event: {}", e);
                 }
             }
         }

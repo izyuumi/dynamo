@@ -313,9 +313,10 @@ impl BlockManagerBuilder {
         let cancel_token = CancellationToken::new();
 
         // Runtime & model config
-        let mut runtime_config_builder = dynamo_llm::block_manager::KvManagerRuntimeConfig::builder()
-            .worker_id(worker_id)
-            .cancellation_token(cancel_token.clone());
+        let mut runtime_config_builder =
+            dynamo_llm::block_manager::KvManagerRuntimeConfig::builder()
+                .worker_id(worker_id)
+                .cancellation_token(cancel_token.clone());
 
         // Pass KV event publisher if provided
         if let Some(publisher) = self.kv_event_publisher {

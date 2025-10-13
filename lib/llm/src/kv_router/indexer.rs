@@ -1045,11 +1045,11 @@ impl KvIndexerSharded {
         let (request_broadcast_tx, _) = broadcast::channel::<ShardedMatchRequest>(1048576);
 
         for _ in 0..num_shards {
-            let (shard_event_tx, shard_event_rx) = mpsc::channel::<RouterEvent>(2048);
-            let (shard_remove_worker_tx, shard_remove_worker_rx) =
+            let (shard_event_tx, mut shard_event_rx) = mpsc::channel::<RouterEvent>(2048);
+            let (shard_remove_worker_tx, mut shard_remove_worker_rx) =
                 mpsc::channel::<WorkerId>(16);
-            let (shard_dump_tx, shard_dump_rx) = mpsc::channel::<DumpRequest>(16); // Add dump channel
-            let shard_broadcast_rx = request_broadcast_tx.subscribe();
+            let (shard_dump_tx, mut shard_dump_rx) = mpsc::channel::<DumpRequest>(16); // Add dump channel
+            let mut shard_broadcast_rx = request_broadcast_tx.subscribe();
             let cancel = token.clone();
             let metrics = metrics.clone();
 
@@ -1069,23 +1069,10 @@ impl KvIndexerSharded {
                         tokio::select! {
                             biased;
 
-<<<<<<< HEAD
                             _ = cancel.cancelled() => {
                                 tracing::trace!("KvCacheIndexer progress loop shutting down");
                                 return;
                             }
-=======
-                runtime.block_on(local_set.run_until(async move {
-                    tokio::task::spawn_local(async move {
-                        let mut trie = RadixTree::new_with_frequency(expiration_duration);
-                        let mut shard_event_rx = shard_event_rx;
-                        let mut shard_remove_worker_rx = shard_remove_worker_rx;
-                        let mut shard_dump_rx = shard_dump_rx;
-                        let mut shard_broadcast_rx = shard_broadcast_rx;
-                        loop {
-                            tokio::select! {
-                                biased;
->>>>>>> 961b656a0 (Use kv event publisher for event manager)
 
                             Some(worker) = shard_remove_worker_rx.recv() => {
                                 trie.remove_worker(worker);

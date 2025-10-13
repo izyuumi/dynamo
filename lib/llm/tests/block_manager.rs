@@ -884,7 +884,8 @@ mod tests {
         let rt = Runtime::from_current().unwrap();
 
         // Create the DynamoEventManager with test mode
-        let (manager, mut event_rx) = dynamo_llm::block_manager::events::DynamoEventManager::new_test();
+        let (manager, mut event_rx) =
+            dynamo_llm::block_manager::events::DynamoEventManager::new_test();
         let event_manager: Arc<dyn EventManager> = manager;
 
         let global_registry = GlobalRegistry::default();
@@ -908,19 +909,17 @@ mod tests {
 
         let timeout = tokio::time::timeout(Duration::from_secs(1), event_rx.recv()).await;
         match timeout {
-            Ok(Some(event)) => {
-                match &event.data {
-                    KvCacheEventData::Stored(store_data) => {
-                        assert_eq!(store_data.blocks.len(), 1, "Should have one block");
-                        assert_eq!(
-                            store_data.blocks[0].block_hash,
-                            ExternalSequenceBlockHash(sequence.blocks()[0].sequence_hash()),
-                            "Block hash should match"
-                        );
-                    }
-                    _ => panic!("Expected Stored event, got: {:?}", event.data),
+            Ok(Some(event)) => match &event.data {
+                KvCacheEventData::Stored(store_data) => {
+                    assert_eq!(store_data.blocks.len(), 1, "Should have one block");
+                    assert_eq!(
+                        store_data.blocks[0].block_hash,
+                        ExternalSequenceBlockHash(sequence.blocks()[0].sequence_hash()),
+                        "Block hash should match"
+                    );
                 }
-            }
+                _ => panic!("Expected Stored event, got: {:?}", event.data),
+            },
             Ok(None) => panic!("Event channel closed without receiving event"),
             Err(_) => panic!("Timeout waiting for Store event"),
         }
@@ -936,7 +935,8 @@ mod tests {
         let rt = Runtime::from_current().unwrap();
 
         // Create the DynamoEventManager with test mode
-        let (manager, mut event_rx) = dynamo_llm::block_manager::events::DynamoEventManager::new_test();
+        let (manager, mut event_rx) =
+            dynamo_llm::block_manager::events::DynamoEventManager::new_test();
         let event_manager: Arc<dyn EventManager> = manager;
 
         let global_registry = GlobalRegistry::default();
@@ -966,19 +966,21 @@ mod tests {
         // Wait for and verify the Remove event
         let timeout = tokio::time::timeout(Duration::from_secs(1), event_rx.recv()).await;
         match timeout {
-            Ok(Some(event)) => {
-                match &event.data {
-                    KvCacheEventData::Removed(remove_data) => {
-                        assert_eq!(remove_data.block_hashes.len(), 1, "Should have one block hash");
-                        assert_eq!(
-                            remove_data.block_hashes[0],
-                            ExternalSequenceBlockHash(expected_hash),
-                            "Block hash should match"
-                        );
-                    }
-                    _ => panic!("Expected Removed event, got: {:?}", event.data),
+            Ok(Some(event)) => match &event.data {
+                KvCacheEventData::Removed(remove_data) => {
+                    assert_eq!(
+                        remove_data.block_hashes.len(),
+                        1,
+                        "Should have one block hash"
+                    );
+                    assert_eq!(
+                        remove_data.block_hashes[0],
+                        ExternalSequenceBlockHash(expected_hash),
+                        "Block hash should match"
+                    );
                 }
-            }
+                _ => panic!("Expected Removed event, got: {:?}", event.data),
+            },
             Ok(None) => panic!("Event channel closed without receiving event"),
             Err(_) => panic!("Timeout waiting for Remove event"),
         }
@@ -993,7 +995,8 @@ mod tests {
         let rt = Runtime::from_current().unwrap();
 
         // Create the DynamoEventManager with test mode
-        let (manager, mut event_rx) = dynamo_llm::block_manager::events::DynamoEventManager::new_test();
+        let (manager, mut event_rx) =
+            dynamo_llm::block_manager::events::DynamoEventManager::new_test();
         let mut publisher = kvbm::events::Publisher::new(manager.clone());
         let event_manager: Arc<dyn EventManager> = manager;
 
@@ -1027,9 +1030,8 @@ mod tests {
                         let hash1 = ExternalSequenceBlockHash(sequence.blocks()[0].sequence_hash());
                         let hash2 = ExternalSequenceBlockHash(sequence.blocks()[1].sequence_hash());
 
-                        let received_hashes: Vec<_> = store_data.blocks.iter()
-                            .map(|b| b.block_hash)
-                            .collect();
+                        let received_hashes: Vec<_> =
+                            store_data.blocks.iter().map(|b| b.block_hash).collect();
 
                         assert!(
                             received_hashes.contains(&hash1),
