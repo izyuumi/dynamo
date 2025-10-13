@@ -784,60 +784,42 @@ func (r *DynamoGraphDeploymentRequestReconciler) createProfilingJob(ctx context.
 			}
 		}
 
-		if dgdr.Spec.Online {
-			// Online profiling: use regular profile_sla args
-			profilerArgs = []string{
-				"--namespace", dgdr.Namespace,
-				"--backend", dgdr.Spec.Backend,
-				"--ttft", fmt.Sprintf("%d", dgdr.Spec.SLA.TTFT),
-				"--itl", fmt.Sprintf("%d", dgdr.Spec.SLA.ITL),
-				"--isl", fmt.Sprintf("%d", dgdr.Spec.SLA.ISL),
-				"--osl", fmt.Sprintf("%d", dgdr.Spec.SLA.OSL),
-				"--output-dir", ProfilingOutputPath,
-				"--min-num-gpus-per-engine", fmt.Sprintf("%d", minGPUs),
-				"--max-num-gpus-per-engine", fmt.Sprintf("%d", maxGPUs),
-			}
+		// Build common profiler args (shared by both online and offline modes)
+		profilerArgs = []string{
+			"--namespace", dgdr.Namespace,
+			"--backend", dgdr.Spec.Backend,
+			"--ttft", fmt.Sprintf("%d", dgdr.Spec.SLA.TTFT),
+			"--itl", fmt.Sprintf("%d", dgdr.Spec.SLA.ITL),
+			"--isl", fmt.Sprintf("%d", dgdr.Spec.SLA.ISL),
+			"--osl", fmt.Sprintf("%d", dgdr.Spec.SLA.OSL),
+			"--output-dir", ProfilingOutputPath,
+			"--min-num-gpus-per-engine", fmt.Sprintf("%d", minGPUs),
+			"--max-num-gpus-per-engine", fmt.Sprintf("%d", maxGPUs),
+		}
 
-			// Add config if provided
-			if dgdr.Spec.ProfilingConfig != nil && dgdr.Spec.ProfilingConfig.ConfigMapRef != nil {
-				profilerArgs = append(profilerArgs, "--config", fmt.Sprintf("%s/%s", ProfilingConfigPath, ProfilingConfigFile))
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name:      VolumeNameProfilingConfig,
-					MountPath: ProfilingConfigPath,
-					ReadOnly:  true,
-				})
-			}
-		} else {
-			// Offline (AIC) profiling: use AI Configurator
-			profilerArgs = []string{
-				"--namespace", dgdr.Namespace,
-				"--backend", dgdr.Spec.Backend,
-				"--ttft", fmt.Sprintf("%d", dgdr.Spec.SLA.TTFT),
-				"--itl", fmt.Sprintf("%d", dgdr.Spec.SLA.ITL),
-				"--isl", fmt.Sprintf("%d", dgdr.Spec.SLA.ISL),
-				"--osl", fmt.Sprintf("%d", dgdr.Spec.SLA.OSL),
-				"--output-dir", ProfilingOutputPath,
-				"--min-num-gpus-per-engine", fmt.Sprintf("%d", minGPUs),
-				"--max-num-gpus-per-engine", fmt.Sprintf("%d", maxGPUs),
+		// Add mode-specific args
+		if !dgdr.Spec.Online {
+			// Offline (AIC) profiling: add AI Configurator args
+			profilerArgs = append(profilerArgs,
 				"--use-ai-configurator",
 				"--aic-model-name", dgdr.Spec.ModelName,
 				"--aic-backend-version", "0.20.0", // TODO: don't hardcode this
-			}
+			)
 
-			// Add AIC-specific args
+			// Add AIC-specific GPU system type
 			if dgdr.Spec.GPU != nil && dgdr.Spec.GPU.Type != "" {
 				profilerArgs = append(profilerArgs, "--aic-system", dgdr.Spec.GPU.Type)
 			}
+		}
 
-			// Add config if provided (AIC can also use config)
-			if dgdr.Spec.ProfilingConfig != nil && dgdr.Spec.ProfilingConfig.ConfigMapRef != nil {
-				profilerArgs = append(profilerArgs, "--config", fmt.Sprintf("%s/%s", ProfilingConfigPath, ProfilingConfigFile))
-				volumeMounts = append(volumeMounts, corev1.VolumeMount{
-					Name:      VolumeNameProfilingConfig,
-					MountPath: ProfilingConfigPath,
-					ReadOnly:  true,
-				})
-			}
+		// Add config if provided (for both online and offline modes)
+		if dgdr.Spec.ProfilingConfig != nil && dgdr.Spec.ProfilingConfig.ConfigMapRef != nil {
+			profilerArgs = append(profilerArgs, "--config", fmt.Sprintf("%s/%s", ProfilingConfigPath, ProfilingConfigFile))
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      VolumeNameProfilingConfig,
+				MountPath: ProfilingConfigPath,
+				ReadOnly:  true,
+			})
 		}
 
 		profilerContainer := corev1.Container{
