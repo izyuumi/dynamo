@@ -21,10 +21,6 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
             self._connector = connector
 
         def callback(self):
-            # Create a different stream to await on the event
-            stream = torch.cuda.Stream()
-            with torch.cuda.stream(stream):
-                 self.event.record()
             self.event.synchronize()
             self._connector.execute_offload_operations()
 
