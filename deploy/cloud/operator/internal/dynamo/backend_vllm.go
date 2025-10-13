@@ -99,7 +99,8 @@ func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName
 		var startRank string
 		switch role {
 		case RoleWorker:
-			startRank = fmt.Sprintf("$(( %d * (GROVE_PCLQ_POD_INDEX + 1) ))", dataParallelSizeLocal)
+			nodeRank, _ := multinodeDeployer.GetNodeRank()
+			startRank = fmt.Sprintf("$(( %d * %s ))", dataParallelSizeLocal, nodeRank)
 		case RoleLeader:
 			startRank = "0" // leader start rank is always 0
 		}
@@ -113,7 +114,7 @@ func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName
 	}
 }
 
-// if world size > GPU count, then we need to inject ray
+// if world size (within DP rank) > GPU count, then we need to inject ray
 // world size = tensor parallel size * pipeline parallel size
 func needsRayDistributedLaunch(container *corev1.Container) bool {
 	tensorParallelSize := getFlagValue(container, tensorParallelSizeFlag)
@@ -121,9 +122,12 @@ func needsRayDistributedLaunch(container *corev1.Container) bool {
 	return tensorParallelSize*pipelineParallelSize > getContainerGPUs(container)
 }
 
+// if world size across all DP ranks > GPU count, then we need to inject data parallel multinode coordination
 func needsDataParallelLaunch(container *corev1.Container) bool {
+	tensorParallelSize := getFlagValue(container, tensorParallelSizeFlag)
 	dataParallelSize := getFlagValue(container, dataParallelSizeFlag)
-	return dataParallelSize > getContainerGPUs(container)
+	pipelineParallelSize := getFlagValue(container, pipelineParallelSizeFlag)
+	return dataParallelSize*tensorParallelSize*pipelineParallelSize > getContainerGPUs(container)
 }
 
 func getFlagValue(container *corev1.Container, flag string) int64 {
