@@ -130,7 +130,7 @@ func (b *SGLangBackend) getMultinodeFlags(numberOfNodes int32, role Role, servic
 		nodeRank, needsShell = multinodeDeployer.GetNodeRank()
 	}
 
-	flags := fmt.Sprintf("--dist-init-addr %s --nnodes %d --node-rank $((%s))", distInitAddr, numberOfNodes, nodeRank)
+	flags := fmt.Sprintf("--dist-init-addr %s --nnodes %d --node-rank %s", distInitAddr, numberOfNodes, nodeRank)
 	return flags, needsShell
 }
 
