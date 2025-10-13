@@ -1,11 +1,11 @@
 ## Inference Gateway Setup with Dynamo
 
-When integration Dynamo with the Inference Gateway you could either use the default EPP image provided by the extension or use the custom Dynamo image.
+When integrating Dynamo with the Inference Gateway you could either use the default EPP image provided by the extension or use the custom Dynamo image.
 
--  1. When using the Dynamo custom EPP image you will take advantage of the Dynamo router when EPP chooses the best worker to route the request to. This setup uses a custom Dynamo plugin `dyn-kv` to pick the best worker. In this case the Dynamo routing logic is moved upstream. We recommend this approach especially if you have more than one Dynamo deployment within an InferencePool.
-- 2. When using the GAIE - provided image for the EPP, the Dynamo deployment is treated as a black box and the EPP would route round-robin among Dynamo FrontEnds. In this case GAIE just fans out the traffic, and the smarts only remain within the Dynamo graph. Use this if you have one Dynamo graph and do not want to obtain the Dynamo EPP image. This is a "backup" approach.
+1. When using the Dynamo custom EPP image you will take advantage of the Dynamo router when EPP chooses the best worker to route the request to. This setup uses a custom Dynamo plugin `dyn-kv` to pick the best worker. In this case the Dynamo routing logic is moved upstream. We recommend this approach especially if you have more than one Dynamo deployment within an InferencePool.
+2. When using the GAIE-provided image for the EPP, the Dynamo deployment is treated as a black box and the EPP would route round-robin among Dynamo FrontEnds. In this case GAIE just fans out the traffic, and the smarts only remain within the Dynamo graph. Use this if you have one Dynamo graph and do not want to obtain the Dynamo EPP image. This is a "backup" approach.
 
-The setup provided here uses the Dynamo custom EPP by default. Set useDynamo = false in your deployment to pick the approach 2.
+The setup provided here uses the Dynamo custom EPP by default. Set `epp.useDynamo=false` in your deployment to pick the approach 2.
 
 EPP’s default kv-routing approach is token-aware only `by approximation` because the prompt is tokenized with a generic tokenizer unaware of the model deployed. But the Dynamo plugin uses a token-aware KV algorithm. It employs the dynamo router which implements kv routing by running your model’s tokenizer inline. The EPP plugin configuration lives in [`helm/dynamo-gaie/epp-config-dynamo.yaml`](helm/dynamo-gaie/epp-config-dynamo.yaml) per EPP [convention](https://gateway-api-inference-extension.sigs.k8s.io/guides/epp-configuration/config-text/).
 
@@ -134,12 +134,7 @@ export EPP_IMAGE=<the-epp-image-you-built>
 ```
 
 ```bash
-helm upgrade --install dynamo-gaie ./helm/dynamo-gaie \
-  -n my-model \
-  -f ./vllm_agg_qwen.yaml \
-  -f ./values-dynamo-epp.yaml \
-  --set epp.useDynamo=true \
-  --set-string extension.image=$EPP_IMAGE
+helm install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml --set-string extension.image=$EPP_IMAGE
 ```
 
 Key configurations include:
@@ -223,7 +218,7 @@ You can also use the standard EPP image`us-central1-docker.pkg.dev/k8s-staging-i
 
 ```bash
 cd deploy/inference-gateway
-helm install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml
+helm install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml -f ./values-blackbox-epp.yaml
 ```
 
 ### 5. Verify Installation ###
