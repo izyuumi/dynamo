@@ -41,7 +41,7 @@ spec:
 
       containers:
       - name: epp
-        image: "{{ if .Values.eppAware.enabled }}{{ default .Values.extension.image .Values.eppAware.eppImage }}{{ else }}{{ .Values.extension.image }}{{ end }}"
+        image: "{{ .Values.extension.image }}"
         imagePullPolicy: {{ default "IfNotPresent" .Values.epp.imagePullPolicy }}
         args:
         {{- if .Values.epp.argsOverride }}
@@ -59,19 +59,21 @@ spec:
           - "9002"
           - -grpcHealthPort
           - "9003"
-        {{- if .Values.eppAware.enabled }}
+        {{- if .Values.epp.useDynamo }}
           - -configFile
-          - "/etc/epp/epp-config-dynamo.yaml"
+          - "{{ .Values.epp.configFile }}"
         {{- end }}
         {{- end }}
 
         {{- $platformNs := default .Release.Namespace .Values.platformNamespace -}}
         {{- $platformName := default "dynamo-platform" .Values.platformReleaseName -}}
-        {{- $ns := required "set eppAware.dynamoNamespace via values" .Values.eppAware.dynamoNamespace -}}
-        {{- $comp := default "backend" .Values.eppAware.dynamoComponent -}}
-        {{- $kv := default "16" .Values.eppAware.dynamoKvBlockSize -}}
+        {{- if .Values.epp.useDynamo }}
+        {{- $ns := required "set epp.dynamo.namespace via values" .Values.epp.dynamo.namespace -}}
+        {{- $comp := default "backend" .Values.epp.dynamo.component -}}
+        {{- $kv := default "16" .Values.epp.dynamo.kvBlockSize -}}
 
-        {{- if .Values.eppAware.enabled }}
+        {{- end }}
+        {{- if .Values.epp.useDynamo }}
         volumeMounts:
           - name: epp-config
             mountPath: /etc/epp
@@ -79,7 +81,7 @@ spec:
         {{- end }}
 
         env:
-        {{- if .Values.eppAware.enabled }}
+        {{- if .Values.epp.useDynamo }}
           - name: ETCD_ENDPOINTS
             value: "{{ $platformName }}-etcd.{{ $platformNs }}:2379"
           - name: NATS_SERVER
@@ -114,7 +116,7 @@ spec:
           initialDelaySeconds: 5
           periodSeconds: 10
 
-      {{- if .Values.eppAware.enabled }}
+      {{- if .Values.epp.useDynamo }}
       volumes:
         - name: epp-config
           configMap:

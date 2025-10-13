@@ -13,12 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-eppAware:
-  enabled: true
-  eppImage: nvcr.io/nvstaging/ai-dynamo/gaie-epp-dynamo:v0.6.0-1
-  dynamoNamespace: vllm-agg
-  dynamoComponent: backend
-  dynamoKvBlockSize: "16"
+extension:
+  image: nvcr.io/nvstaging/ai-dynamo/gaie-epp-dynamo:v0.6.0-1
 
 imagePullSecrets:
   - docker-imagepullsecret
@@ -27,6 +23,11 @@ platformReleaseName: dynamo-platform
 platformNamespace: "my-model"
 
 epp:
+  useDynamo: true
+  dynamo:
+    namespace: vllm-agg
+    component: backend
+    kvBlockSize: "16"
   extraEnv:
     - name: USE_STREAMING
       value: "true"

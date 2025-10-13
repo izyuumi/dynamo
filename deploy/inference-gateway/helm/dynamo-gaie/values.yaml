@@ -49,7 +49,7 @@ httpRoute:
     request: "300s"
 
 extension:
-  # default (non-epp-aware) EPP image for the GAIE extension
+  # EPP image for the GAIE extension (use Dynamo EPP image when epp.useDynamo is true)
   image: us-central1-docker.pkg.dev/k8s-artifacts-prod/images/gateway-api-inference-extension/epp:v0.4.0
 
 # generic knobs you may want in both modes
@@ -62,11 +62,12 @@ epp:
   # When empty, chart will render sane defaults
   argsOverride: []
 
-# epp-aware mode toggle + specific settings
-eppAware:
-  enabled: false
-  # Optional: override EPP image when epp-aware=true
-  eppImage: nvcr.io/nvstaging/ai-dynamo/gaie-epp-dynamo:v0.6.0-1
-  dynamoNamespace: ""
-  dynamoComponent: ""
-  dynamoKvBlockSize: ""
+  # Dynamo routing mode - set to true to enable KV-aware routing via Dynamo
+  useDynamo: true
+
+  # Dynamo-specific settings (only used when useDynamo: true)
+  configFile: "/etc/epp/epp-config-dynamo.yaml"
+  dynamo:
+    namespace: ""      # Required when useDynamo: true
+    component: "backend"
+    kvBlockSize: "16"
