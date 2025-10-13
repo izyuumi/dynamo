@@ -150,8 +150,9 @@ def save_test_data(output_dir, request_id, normal_content,
 
     # Generate filename
     suffix = "tool" if has_tools and tool_calls else "no-tool"
-    # Use first 8 characters of UUID for filename
-    short_uuid = request_id.split("-")[0] if "-" in request_id else request_id[:8]
+    # Strip "chatcmpl-" prefix if present, then use first 8 characters of UUID for filename
+    uuid_part = request_id.replace("chatcmpl-", "", 1)
+    short_uuid = uuid_part.split("-")[0] if "-" in uuid_part else uuid_part[:8]
     filename = f"chat_completion_stream_{short_uuid}-{suffix}.json"
     file_path = output_path / filename
 
@@ -164,9 +165,23 @@ def save_test_data(output_dir, request_id, normal_content,
         "data": data_chunks
     }
 
-    # Write to file with pretty printing
+    # Write to file with compact data array formatting
     with open(file_path, "w") as f:
-        json.dump(output_data, f, indent=2)
+        f.write("{\n")
+        f.write(f'  "request_id": {json.dumps(request_id)},\n')
+        f.write(f'  "normal_content": {json.dumps(normal_content)},\n')
+        f.write(f'  "reasoning_content": {json.dumps(reasoning_content)},\n')
+        f.write(f'  "tool_calls": {json.dumps(tool_calls)},\n')
+        f.write('  "data": [\n')
+        for i, chunk in enumerate(data_chunks):
+            # Write each chunk on a single line
+            chunk_json = json.dumps(chunk, separators=(',', ':'))
+            if i < len(data_chunks) - 1:
+                f.write(f'    {chunk_json},\n')
+            else:
+                f.write(f'    {chunk_json}\n')
+        f.write('  ]\n')
+        f.write('}\n')
 
     return file_path
 
