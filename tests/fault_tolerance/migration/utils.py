@@ -114,13 +114,13 @@ def determine_request_receiving_worker(
         while iteration < max_iterations:
             # Check if the worker logs contain 'New Request ID:' message
             try:
-                with open(worker._log_path, "r") as f:
+                with open(worker.log_path, "r") as f:
                     log_content = f.read()
                     if "New Request ID: " in log_content:
                         result_list.append(True)
                         return
             except Exception as e:
-                pytest.fail(f"Could not read log file {worker._log_path}: {e}")
+                pytest.fail(f"Could not read log file {worker.log_path}: {e}")
 
             time.sleep(poll_interval_ms / 1000.0)
             iteration += 1
@@ -198,7 +198,7 @@ def verify_migration_occurred(frontend_process: DynamoFrontendProcess) -> None:
     Args:
         frontend_process: The frontend process to check logs for
     """
-    log_path = frontend_process._log_path
+    log_path = frontend_process.log_path
     try:
         with open(log_path, "r") as f:
             log_content = f.read()
