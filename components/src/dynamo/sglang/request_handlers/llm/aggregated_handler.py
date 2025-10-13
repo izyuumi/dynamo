@@ -4,19 +4,18 @@
 import asyncio
 import logging
 import time
-from typing import Any, AsyncGenerator, Dict, Optional
+from typing import Any, AsyncGenerator, Dict
 
 import sglang as sgl
 
-from dynamo._core import Client, Component, Context
+from dynamo._core import Component, Context
 from dynamo.sglang.args import Config
-from dynamo.sglang.protocol import DisaggPreprocessedRequest
 from dynamo.sglang.publisher import DynamoSglangPublisher
 from dynamo.sglang.request_handlers.handler_base import BaseWorkerHandler
 
 
-class DecodeWorkerHandler(BaseWorkerHandler):
-    """Handler for decode workers in disaggregated serving mode."""
+class AggregatedWorkerHandler(BaseWorkerHandler):
+    """Handler for aggregated serving mode."""
 
     def __init__(
         self,
@@ -24,37 +23,23 @@ class DecodeWorkerHandler(BaseWorkerHandler):
         engine: sgl.Engine,
         config: Config,
         publisher: DynamoSglangPublisher,
-        prefill_client: Optional[Client] = None,
-        prefill_router_client: Optional[Client] = None,
     ) -> None:
-        """Initialize decode worker handler.
+        """Initialize aggregated worker handler.
 
         Args:
             component: The Dynamo runtime component.
             engine: The SGLang engine instance.
             config: SGLang and Dynamo configuration.
             publisher: Metrics publisher for the worker.
-            prefill_client: Optional client for prefill worker in disaggregated mode.
-            prefill_router_client: Optional client for prefill router in disaggregated mode.
-
-        Raises:
-            ValueError: If prefill_client is not provided in decode serving mode.
         """
         super().__init__(
             component,
             engine,
             config,
             publisher,
-            prefill_client,
+            prefill_client=None,
         )
-        if self.prefill_client is None:
-            raise ValueError(
-                "prefill_client must be provided for decode worker handler"
-            )
-        self.prefill_client = prefill_client
-
-        self.prefill_router_client = prefill_router_client
-        logging.info("Decode worker handler initialized")
+        logging.info("Aggregated worker handler initialized")
 
     def cleanup(self) -> None:
         """Shutdown the engine and cleanup resources."""
@@ -97,7 +82,7 @@ class DecodeWorkerHandler(BaseWorkerHandler):
     async def generate(
         self, request: Dict[str, Any], context: Context
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        """Generate response in disaggregated mode.
+        """Generate response in aggregated mode.
 
         Args:
             request: Request dict with input and sampling parameters.
@@ -105,103 +90,22 @@ class DecodeWorkerHandler(BaseWorkerHandler):
 
         Yields:
             Response dicts with token_ids or OpenAI-formatted chunks.
-
-        Raises:
-            RuntimeError: If no bootstrap info received from prefill worker.
         """
         logging.debug(f"New Request ID: {context.id()}")
         sampling_params = self._build_sampling_params(request)
         input_param = self._get_input_param(request)
 
-        # Check if prefill workers are available
-        has_prefill_router = (
-            self.prefill_router_client is not None
-            and self.prefill_router_client.instance_ids()
-        )
-        has_prefill_client = (
-            self.prefill_client is not None and self.prefill_client.instance_ids()
-        )
-
-        if not has_prefill_router and not has_prefill_client:
-            # No prefill workers found
-            logging.error(
-                f"No prefill worker instances found for request {context.id()}. "
-                "In disaggregated mode with SGLang, ensure:\n"
-                "1. Prefill workers are running with --is-prefill-worker flag\n"
-                "2. Prefill workers can connect to ETCD (check ETCD_ENDPOINT environment variable)\n"
-                "3. Network connectivity exists between decode and prefill workers\n"
-                "4. Prefill workers started successfully without errors"
-            )
-            raise RuntimeError(
-                "No prefill worker instances available. Check that prefill workers are running with "
-                "--is-prefill-worker flag and can connect to ETCD."
-            )
-
-        # request the bootstrap info from the target prefill worker
-        try:
-            if has_prefill_router:
-                token_ids = request["token_ids"]
-                stream = await self.prefill_router_client.generate(token_ids)
-                result = await anext(stream)
-                (
-                    worker_id,
-                    overlap,
-                ) = result.data()  # Returns tuple (worker_id, overlap_amount)
-                logging.info(f"Best prefill worker ID: {worker_id}, overlap: {overlap}")
-
-                prefill_stream = await self.prefill_client.direct(
-                    DisaggPreprocessedRequest(
-                        request=request,
-                        sampling_params=sampling_params,
-                    ).model_dump(),
-                    worker_id,
-                )
-            else:
-                prefill_stream = await self.prefill_client.generate(
-                    DisaggPreprocessedRequest(
-                        request=request,
-                        sampling_params=sampling_params,
-                    ).model_dump(),
-                    context=context,
-                )
-
-            bootstrap_info = None
-            async for info in prefill_stream:
-                bootstrap_info = info.data()
-                break
-
-            if not bootstrap_info:
-                raise RuntimeError("No bootstrap info received from prefill worker")
-
-        except Exception as e:
-            error_str = str(e)
-            if "no instances found" in error_str and "prefill" in error_str.lower():
-                logging.error(
-                    f"Failed to connect to prefill workers for request {context.id()}. "
-                    "This indicates prefill workers are not available. "
-                    "In disaggregated SGLang mode, ensure:\n"
-                    "1. Prefill workers are running with --is-prefill-worker flag\n"
-                    "2. Prefill workers can connect to ETCD (check ETCD_ENDPOINT environment variable)\n"
-                    "3. Network connectivity exists between decode and prefill workers\n"
-                    "4. Prefill workers started successfully without errors\n"
-                    f"Original error: {e}"
-                )
-            raise
-
-        decode = await self.engine.async_generate(
+        agg = await self.engine.async_generate(
             **input_param,
             sampling_params=sampling_params,
             stream=True,
-            bootstrap_host=bootstrap_info["bootstrap_host"],
-            bootstrap_port=bootstrap_info["bootstrap_port"],
-            bootstrap_room=bootstrap_info["bootstrap_room"],
         )
 
         if self.skip_tokenizer_init:
-            async for out in self._process_token_stream(decode, context):
+            async for out in self._process_token_stream(agg, context):
                 yield out
         else:
-            async for out in self._process_text_stream(decode, context):
+            async for out in self._process_text_stream(agg, context):
                 yield out
 
     async def _process_token_stream(
