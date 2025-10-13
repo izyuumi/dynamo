@@ -17,7 +17,7 @@ limitations under the License.
 
 # Running KVBM in vLLM
 
-This guide explains how to leverage KVBM (KV Block Manager) to mange KV cache and do KV offloading in vLLM.
+This guide explains how to leverage KVBM (KV Block Manager) to manage KV cache and do KV offloading in vLLM.
 
 To learn what KVBM is, please check [here](https://docs.nvidia.com/dynamo/latest/architecture/kvbm_intro.html)
 
