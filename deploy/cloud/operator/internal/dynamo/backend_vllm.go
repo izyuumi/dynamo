@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ai-dynamo/dynamo/deploy/cloud/operator/api/v1alpha1"
+	"github.com/ai-dynamo/dynamo/deploy/cloud/operator/internal/consts"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -69,15 +70,8 @@ func (b *VLLMBackend) UpdatePodSpec(podSpec *corev1.PodSpec, numberOfNodes int32
 	// do nothing
 }
 
-// data parallel case
-// data parallel backend defaults to mp, --data-parallel-backend can be set as ray
-// need to set --data-parallel-address to leader address
-// --data-parallel-rank can be set, should either not exist or be set to 1
-// --data-parall-size-local needs to be set to pod gpu count
-// --data-parallel-rpc-port needs to be set to a unique port (set as const)
-// --data-parallel-start rank needs to be set to index*dp-size-local
-
-// updateVLLMMultinodeArgs applies Ray-specific modifications for multinode deployments
+// updateVLLMMultinodeArgs will inject Ray-specific flags for tensor parallel multinode deployments
+// OR data parallel flags for data parallel multinode deployments
 func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName string, multinodeDeployer MultinodeDeployer) {
 	if needsRayDistributedLaunch(container) {
 		switch role {
@@ -94,9 +88,7 @@ func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName
 		}
 	} else if needsDataParallelLaunch(container) {
 		leaderHostname := multinodeDeployer.GetLeaderHostname(serviceName)
-		// TODO: case where division has remainder
 		dataParallelSizeLocal := getContainerGPUs(container) / getWorldSize(container)
-		// nodeRank, _ := multinodeDeployer.GetNodeRank()
 		var startRank string
 		switch role {
 		case RoleWorker:
@@ -105,13 +97,16 @@ func updateVLLMMultinodeArgs(container *corev1.Container, role Role, serviceName
 		case RoleLeader:
 			startRank = "0" // leader start rank is always 0
 		}
-		container.Args = append(container.Args,
+		flags := []string{
 			"--data-parallel-address", leaderHostname,
 			"--data-parallel-size-local", strconv.FormatInt(dataParallelSizeLocal, 10),
 			"--data-parallel-rpc-port", dataParallelRPCPort,
 			"--data-parallel-start-rank", startRank,
-		)
-		container.Args = []string{strings.Join(container.Args, " ")} // combine args for exec command
+		}
+		injectFlagsIntoContainerCommand(container, strings.Join(flags, " "), true)
+	} else {
+		logger := log.Log.WithName("vllm-backend")
+		logger.Info("No need to inject Ray-specific or data parallel flags for multinode deployments", "args", strings.Join(container.Args, " "))
 	}
 }
 
@@ -151,7 +146,7 @@ func getContainerGPUs(container *corev1.Container) int64 {
 	var containerGPUs int64 = 1
 	// Requests defaults to Limits, doesn't make sense in case where Requests < Limits for gpus
 	for name, quantity := range container.Resources.Limits {
-		if name.String() == "nvidia.com/gpu" { // TODO: use const
+		if name.String() == consts.KubeResourceGPUNvidia {
 			containerGPUs = quantity.Value()
 			break
 		}
