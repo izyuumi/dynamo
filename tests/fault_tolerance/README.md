@@ -13,7 +13,7 @@ pytest tests/fault_tolerance/migration/test_vllm.py::test_request_migration_vllm
 
 1. Starts a Dynamo frontend with round-robin routing
 2. Starts 2 workers sequentially with vLLM backend
-3. Sends a long completion request (8192 tokens) in a separate thread
+3. Sends a long completion request in a separate thread
 4. Uses parallel polling to determine which worker received the request by checking for
    "New Request ID:" in logs
 5. Kills the worker processing the request using SIGKILL
@@ -34,6 +34,41 @@ pytest tests/fault_tolerance/migration/test_vllm.py::test_request_migration_vllm
 4. Gracefully shuts down the worker processing the request using SIGTERM with 10s timeout
 5. Verifies the request completes successfully despite the graceful shutdown
 6. Verifies migration occurred by checking frontend logs
+
+### test_no_request_migration_vllm_worker_failure
+Tests worker fault tolerance when migration is disabled (migration_limit=0):
+
+```bash
+pytest tests/fault_tolerance/migration/test_vllm.py::test_no_request_migration_vllm_worker_failure -v -s
+```
+
+1. Starts a Dynamo frontend with round-robin routing
+2. Starts 2 workers sequentially with vLLM backend and migration_limit=0 (migration disabled)
+3. Sends a long completion request in a separate thread
+4. Uses parallel polling to determine which worker received the request
+5. Kills the worker processing the request using SIGKILL
+6. Verifies the request fails with status 500 (as expected without migration)
+7. Verifies migration did NOT occur by checking for "Migration limit exhausted" in frontend logs
+
+This test validates that when migration is disabled, requests fail when the processing worker
+is killed, which is the expected behavior.
+
+### test_no_request_migration_vllm_graceful_shutdown
+Tests worker fault tolerance with graceful shutdown when migration is disabled (migration_limit=0):
+
+```bash
+pytest tests/fault_tolerance/migration/test_vllm.py::test_no_request_migration_vllm_graceful_shutdown -v -s
+```
+
+1. Starts a Dynamo frontend and 2 workers with vLLM backend and migration_limit=0
+2. Sends a long completion request in a separate thread
+3. Uses parallel polling to determine which worker received the request
+4. Gracefully shuts down the worker processing the request using SIGTERM with 10s timeout
+5. Verifies the request fails with status 500 (as expected without migration)
+6. Verifies migration did NOT occur by checking frontend logs
+
+This test validates that even with graceful shutdown, requests fail when migration is disabled,
+confirming that migration_limit=0 properly disables the migration feature.
 
 ## Cancellation Tests
 

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class DynamoWorkerProcess(ManagedProcess):
     """Process manager for Dynamo worker with vLLM backend"""
 
-    def __init__(self, request, worker_id: str):
+    def __init__(self, request, worker_id: str, migration_limit: int = 3):
         self.worker_id = worker_id
 
         command = [
@@ -42,7 +42,7 @@ class DynamoWorkerProcess(ManagedProcess):
             "--max-model-len",
             "8192",
             "--migration-limit",
-            "3",
+            str(migration_limit),
         ]
 
         # Set debug logging environment
@@ -103,7 +103,7 @@ class DynamoWorkerProcess(ManagedProcess):
 @pytest.mark.e2e
 @pytest.mark.model(FAULT_TOLERANCE_MODEL_NAME)
 def test_request_migration_vllm_worker_failure(
-    request, runtime_services, predownload_models
+    request, runtime_services, predownload_models, set_ucx_tls_no_mm
 ):
     """
     End-to-end test for worker fault tolerance with migration support.
@@ -153,7 +153,7 @@ def test_request_migration_vllm_worker_failure(
 @pytest.mark.e2e
 @pytest.mark.model(FAULT_TOLERANCE_MODEL_NAME)
 def test_request_migration_vllm_graceful_shutdown(
-    request, runtime_services, predownload_models
+    request, runtime_services, predownload_models, set_ucx_tls_no_mm
 ):
     """
     End-to-end test for worker fault tolerance with graceful shutdown and migration support.
@@ -197,3 +197,133 @@ def test_request_migration_vllm_graceful_shutdown(
 
                 # Step 7: Verify migration occurred during graceful shutdown
                 verify_migration_occurred(frontend)
+
+
+@pytest.mark.vllm
+@pytest.mark.gpu_1
+@pytest.mark.e2e
+@pytest.mark.model(FAULT_TOLERANCE_MODEL_NAME)
+def test_no_request_migration_vllm_worker_failure(
+    request, runtime_services, predownload_models, set_ucx_tls_no_mm
+):
+    """
+    End-to-end test for worker fault tolerance with migration disabled.
+
+    This test verifies that when migration is disabled (migration_limit=0) and a worker
+    is killed during request processing, the request fails as expected without migration.
+    This is the opposite behavior of test_request_migration_vllm_worker_failure.
+    """
+
+    # Step 1: Start the frontend
+    with DynamoFrontendProcess(request) as frontend:
+        logger.info("Frontend started successfully")
+
+        # Step 2: Start 2 workers sequentially with migration disabled
+        logger.info("Starting worker 1 with migration disabled...")
+        with DynamoWorkerProcess(request, "worker1", migration_limit=0) as worker1:
+            logger.info(f"Worker 1 PID: {worker1.get_pid()}")
+
+            with DynamoWorkerProcess(request, "worker2", migration_limit=0) as worker2:
+                logger.info(f"Worker 2 PID: {worker2.get_pid()}")
+
+                # Step 3: Send the request
+                request_thread, response_list = start_completion_request()
+
+                # Step 4: Use polling to determine which worker received the request
+                worker, worker_name = determine_request_receiving_worker(
+                    worker1, worker2
+                )
+
+                # Step 5: Kill the worker that has the request
+                logger.info(
+                    f"Killing {worker_name} with PID {worker.get_pid()} processing the request"
+                )
+                terminate_process_tree(worker.get_pid(), immediate_kill=True, timeout=0)
+
+                # Step 6: Validate the completion response - should fail without migration
+                try:
+                    validate_completion_response(request_thread, response_list)
+                    pytest.fail(
+                        "Request succeeded unexpectedly when migration was disabled"
+                    )
+                except AssertionError as e:
+                    assert "Request failed with status 500: " in str(
+                        e
+                    ), f"Unexpected request error message: {e}"
+
+                # Step 7: Verify migration did NOT occur - should fail
+                try:
+                    verify_migration_occurred(frontend)
+                    pytest.fail(
+                        "Migration verification unexpectedly passed when migration was disabled"
+                    )
+                except AssertionError as e:
+                    assert "'Cannot recreate stream: ...' error found in logs" in str(
+                        e
+                    ), f"Unexpected migration message: {e}"
+
+
+@pytest.mark.vllm
+@pytest.mark.gpu_1
+@pytest.mark.e2e
+@pytest.mark.model(FAULT_TOLERANCE_MODEL_NAME)
+def test_no_request_migration_vllm_graceful_shutdown(
+    request, runtime_services, predownload_models, set_ucx_tls_no_mm
+):
+    """
+    End-to-end test for worker fault tolerance with graceful shutdown and migration disabled.
+
+    This test verifies that when migration is disabled (migration_limit=0) and a worker
+    receives a graceful shutdown signal (SIGTERM) during request processing, the request
+    fails as expected without migration. This is the opposite behavior of
+    test_request_migration_vllm_graceful_shutdown.
+    """
+
+    # Step 1: Start the frontend
+    with DynamoFrontendProcess(request) as frontend:
+        logger.info("Frontend started successfully")
+
+        # Step 2: Start 2 workers sequentially with migration disabled
+        with DynamoWorkerProcess(request, "worker1", migration_limit=0) as worker1:
+            logger.info(f"Worker 1 PID: {worker1.get_pid()}")
+
+            with DynamoWorkerProcess(request, "worker2", migration_limit=0) as worker2:
+                logger.info(f"Worker 2 PID: {worker2.get_pid()}")
+
+                # Step 3: Send the request
+                request_thread, response_list = start_completion_request()
+
+                # Step 4: Use polling to determine which worker received the request
+                worker, worker_name = determine_request_receiving_worker(
+                    worker1, worker2
+                )
+
+                # Step 5: Gracefully shutdown the worker that has the request
+                logger.info(
+                    f"Gracefully shutting down {worker_name} with PID {worker.get_pid()} processing the request"
+                )
+                terminate_process_tree(
+                    worker.get_pid(), immediate_kill=False, timeout=10
+                )
+
+                # Step 6: Validate the completion response - should fail without migration
+                try:
+                    validate_completion_response(request_thread, response_list)
+                    pytest.fail(
+                        "Request succeeded unexpectedly when migration was disabled"
+                    )
+                except AssertionError as e:
+                    assert "Request failed with status 500: " in str(
+                        e
+                    ), f"Unexpected request error message: {e}"
+
+                # Step 7: Verify migration did NOT occur - should fail
+                try:
+                    verify_migration_occurred(frontend)
+                    pytest.fail(
+                        "Migration verification unexpectedly passed when migration was disabled"
+                    )
+                except AssertionError as e:
+                    assert "'Cannot recreate stream: ...' error found in logs" in str(
+                        e
+                    ), f"Unexpected migration message: {e}"
