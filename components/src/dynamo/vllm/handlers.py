@@ -33,7 +33,7 @@ class BaseWorkerHandler(ABC):
         self.component = component
         self.engine_client = engine
         self.default_sampling_params = default_sampling_params
-        self.kv_publisher = None
+        self.kv_publishers = None
         self.engine_monitor = VllmEngineMonitor(runtime, engine)
 
     @abstractmethod
