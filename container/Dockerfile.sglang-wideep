@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-ARG SGLANG_IMAGE_TAG="v0.5.3rc0-cu126"
+ARG SGLANG_IMAGE_TAG="v0.5.3-cu126"
 
 FROM lmsysorg/sglang:${SGLANG_IMAGE_TAG}
 
@@ -17,7 +17,7 @@ ARG CARGO_BUILD_JOBS="16"
 RUN apt-get update -y && \
     apt-get install -y \
       cmake meson ninja-build pybind11-dev patchelf net-tools \
-      build-essential protobuf-compiler libssl-dev pkg-config \
+      build-essential protobuf-compiler libssl-dev pkg-config git \
       clang libclang-dev git rapidjson-dev zlib1g-dev jq && \
     pip install --break-system-packages meson-python wheel build
 
@@ -128,7 +128,7 @@ RUN git clone --depth=1 \
     cmake --build perf_analyzer/build -- -j$(nproc)
 
 ENV PATH=/sgl-workspace/perf_analyzer/build/perf_analyzer/src/perf-analyzer-build:$PATH
-RUN pip install --break-system-packages genai-perf
+RUN pip install --break-system-packages aiperf
 
 # Enable forceful shutdown of inflight requests
 ENV SGL_FORCE_SHUTDOWN=1
