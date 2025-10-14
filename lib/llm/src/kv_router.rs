@@ -576,6 +576,13 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
 
                     loop {
                         tokio::select! {
+                            biased;
+
+                            _ = context_for_monitoring.stopped() => {
+                                tracing::debug!("Request {context_id} cancelled, ending stream");
+                                break;
+                            }
+
                             item = response_stream.next() => {
                                 let Some(item) = item else {
                                     break;
@@ -588,10 +595,6 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
                                     prefill_marked = true;
                                 }
                                 yield item;
-                            }
-                            _ = context_for_monitoring.stopped() => {
-                                tracing::debug!("Request {context_id} cancelled, ending stream");
-                                break;
                             }
                         }
                     }
