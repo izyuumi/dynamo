@@ -324,13 +324,13 @@ pub(crate) struct OverlapScores {
 #[pymethods]
 impl OverlapScores {
     #[getter]
-    fn scores(&self) -> HashMap<llm_rs::kv_router::indexer::WorkerId, u32> {
-        // Aggregate scores over dp_ranks - sum up scores for the same worker_id
-        let mut aggregated: HashMap<llm_rs::kv_router::indexer::WorkerId, u32> = HashMap::new();
-        for (worker, score) in &self.inner.scores {
-            *aggregated.entry(worker.worker_id).or_insert(0) += score;
-        }
-        aggregated
+    fn scores(&self) -> HashMap<(i64, Option<u32>), u32> {
+        // Return scores with full WorkerWithDpRank granularity as (worker_id, dp_rank) tuples
+        self.inner
+            .scores
+            .iter()
+            .map(|(worker, score)| ((worker.worker_id, worker.dp_rank), *score))
+            .collect()
     }
 
     #[getter]
@@ -1093,7 +1093,7 @@ impl KvPushRouter {
         let update_states = request_id.is_some();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let (worker_id, overlap_blocks) = chooser
+            let (best_worker, overlap_blocks) = chooser
                 .find_best_match(
                     request_id.as_deref(),
                     &token_ids,
@@ -1104,7 +1104,8 @@ impl KvPushRouter {
                 .map_err(to_pyerr)?;
 
             // Return a tuple of (worker_id, overlap_blocks)
-            Ok((worker_id, overlap_blocks))
+            // Extract worker_id from WorkerWithDpRank for Python API
+            Ok((best_worker.worker_id, overlap_blocks))
         })
     }
 
