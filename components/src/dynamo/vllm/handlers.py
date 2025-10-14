@@ -218,8 +218,8 @@ class DecodeWorkerHandler(BaseWorkerHandler):
                     return
                 logger.warning(f"Prefill error: {e}, falling back to local prefill")
 
-        # Extract dp_rank from request if available
-        dp_rank = request.get("dp_rank")
+        # Extract dp_rank from request (defaults to 0)
+        dp_rank = request.get("dp_rank", 0)
 
         async with self._abort_monitor(context, request_id):
             try:
@@ -251,8 +251,8 @@ class PrefillWorkerHandler(BaseWorkerHandler):
         sampling_params_dict = extra_args.get("sampling_params", {})
         sampling_params = msgspec.convert(sampling_params_dict, SamplingParams)
 
-        # Extract dp_rank from request if available
-        dp_rank = request.get("dp_rank")
+        # Extract dp_rank from request (defaults to 0)
+        dp_rank = request.get("dp_rank", 0)
 
         async with self._abort_monitor(context, request_id, is_prefill=True):
             try:

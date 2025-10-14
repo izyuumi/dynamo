@@ -5,23 +5,24 @@ use crate::tokens::{SequenceHash, Token};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// A worker identifier combined with its optional data parallel rank.
+/// A worker identifier combined with its data parallel rank.
 /// Used for routing decisions in data parallel setups.
+/// dp_rank = 0 indicates either DP not enabled or the first rank.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct WorkerWithDpRank {
     pub worker_id: i64,
-    pub dp_rank: Option<u32>,
+    pub dp_rank: u32,
 }
 
 impl WorkerWithDpRank {
-    pub fn new(worker_id: i64, dp_rank: Option<u32>) -> Self {
+    pub fn new(worker_id: i64, dp_rank: u32) -> Self {
         Self { worker_id, dp_rank }
     }
 
     pub fn from_worker_id(worker_id: i64) -> Self {
         Self {
             worker_id,
-            dp_rank: None,
+            dp_rank: 0,
         }
     }
 }
@@ -49,8 +50,8 @@ impl Default for RouterRequest {
 pub enum RouterResponse {
     New {
         worker_id: i64,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        dp_rank: Option<u32>,
+        #[serde(default)]
+        dp_rank: u32,
         overlap_blocks: u32,
     },
     PrefillMarked {
@@ -229,9 +230,9 @@ pub struct KvCacheEvent {
     pub event_id: u64,
     /// The data associated with the event.
     pub data: KvCacheEventData,
-    /// The optional data parallel rank of the worker emitting this event.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dp_rank: Option<u32>,
+    /// The data parallel rank of the worker emitting this event (0 if DP not enabled).
+    #[serde(default)]
+    pub dp_rank: u32,
 }
 
 /// Represents the data associated with a cache event.
@@ -346,7 +347,7 @@ mod tests {
         let event = KvCacheEvent {
             event_id: 1,
             data: event_data,
-            dp_rank: None,
+            dp_rank: 0,
         };
 
         let events = KvCacheEvents {

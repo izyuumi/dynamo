@@ -124,7 +124,7 @@ impl MockVllmEngine {
 
             let scheduler = Scheduler::new(
                 args.clone(),
-                Some(dp_rank),
+                dp_rank,
                 Some(output_tx),
                 Some(kv_events_tx), // Pass the KV events sender to scheduler
                 Some(cancel_token.clone()),
@@ -283,7 +283,7 @@ impl MockVllmEngine {
                             let event = KvCacheEvent {
                                 event_id: Uuid::new_v4().as_u128() as u64,
                                 data: event_data,
-                                dp_rank: Some(dp_rank),
+                                dp_rank,
                             };
 
                             // Publish the event
@@ -349,7 +349,7 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<LLMEngineOutput>, Error>
                 .expect("max_output_tokens must be specified for mocker")
                 as usize,
             uuid: Some(request_uuid),
-            dp_rank: Some(dp_rank),
+            dp_rank,
         };
 
         let (request_tx, mut request_rx) = mpsc::unbounded_channel::<OutputSignal>();

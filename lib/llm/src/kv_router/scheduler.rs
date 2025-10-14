@@ -26,8 +26,8 @@ use crate::tokens::SequenceHash;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KVHitRateEvent {
     pub worker_id: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub dp_rank: Option<u32>,
+    #[serde(default)]
+    pub dp_rank: u32,
     pub isl_blocks: usize,
     pub overlap_blocks: u32,
 }
@@ -500,21 +500,12 @@ impl WorkerSelector for DefaultWorkerSelector {
         // Outer loop: iterate over all workers from runtime config
         // Inner loop: iterate over all dp_ranks for each worker
         for (worker_id, config) in workers.iter() {
-            // Get data_parallel_size from runtime config (defaults to 1 if not set)
-            let data_parallel_size = config
-                .as_ref()
-                .and_then(|c| c.data_parallel_size)
-                .unwrap_or(1);
+            // Get data_parallel_size from runtime config
+            // data_parallel_size defaults to 1 in ModelRuntimeConfig
+            let data_parallel_size = config.as_ref().map(|c| c.data_parallel_size).unwrap_or(1); // Fallback if config is None
 
-            // Build list of dp_rank options to try: [None, Some(0), Some(1), ...]
-            // This ensures we check for workers without DP (None) and all DP ranks
-            let mut dp_ranks_to_check = vec![None];
-            for dp_rank_idx in 0..data_parallel_size {
-                dp_ranks_to_check.push(Some(dp_rank_idx));
-            }
-
-            // Iterate over all dp_rank possibilities for this worker
-            for dp_rank in dp_ranks_to_check {
+            // Iterate over all dp_ranks for this worker
+            for dp_rank in 0..data_parallel_size {
                 let worker = WorkerWithDpRank::new(*worker_id, dp_rank);
 
                 // Get overlap for this worker (defaults to 0 if not in overlaps)

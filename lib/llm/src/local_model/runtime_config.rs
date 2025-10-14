@@ -19,9 +19,9 @@ pub struct ModelRuntimeConfig {
 
     pub reasoning_parser: Option<String>,
 
-    /// Total number of data parallel ranks for this worker (used with data parallelism)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data_parallel_size: Option<u32>,
+    /// Total number of data parallel ranks for this worker (1 if DP not enabled)
+    #[serde(default = "default_data_parallel_size")]
+    pub data_parallel_size: u32,
 
     /// Mapping of engine-specific runtime configs
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -36,6 +36,10 @@ pub struct ModelRuntimeConfig {
     // doesn't provide JSON parsing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tensor_model_config: Option<tensor::TensorModelConfig>,
+}
+
+fn default_data_parallel_size() -> u32 {
+    1
 }
 
 impl ModelRuntimeConfig {

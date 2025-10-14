@@ -45,7 +45,7 @@ impl ModelRuntimeConfig {
     }
 
     #[setter]
-    fn set_data_parallel_size(&mut self, data_parallel_size: Option<u32>) {
+    fn set_data_parallel_size(&mut self, data_parallel_size: u32) {
         self.inner.data_parallel_size = data_parallel_size;
     }
 

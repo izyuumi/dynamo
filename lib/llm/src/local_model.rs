@@ -295,6 +295,7 @@ impl LocalModelBuilder {
             self.runtime_config.max_num_seqs = mocker_engine_args.max_num_seqs.map(|v| v as u64);
             self.runtime_config.max_num_batched_tokens =
                 mocker_engine_args.max_num_batched_tokens.map(|v| v as u64);
+            self.runtime_config.data_parallel_size = mocker_engine_args.dp_size;
         }
 
         card.migration_limit = self.migration_limit;

@@ -234,19 +234,19 @@ impl Drop for ZmqKvEventListener {
 pub(crate) struct KvEventPublisher {
     inner: Arc<llm_rs::kv_router::publisher::KvEventPublisher>,
     kv_block_size: usize,
-    dp_rank: Option<u32>,
+    dp_rank: u32,
     warning_count: Arc<AtomicU32>,
 }
 
 #[pymethods]
 impl KvEventPublisher {
     #[new]
-    #[pyo3(signature = (component, worker_id, kv_block_size, dp_rank=None))]
+    #[pyo3(signature = (component, worker_id, kv_block_size, dp_rank=0))]
     fn new(
         component: Component,
         worker_id: i64,
         kv_block_size: usize,
-        dp_rank: Option<u32>,
+        dp_rank: u32,
     ) -> PyResult<Self> {
         if kv_block_size == 0 {
             return Err(to_pyerr(anyhow::anyhow!("kv_block_size cannot be 0")));
@@ -324,7 +324,7 @@ pub(crate) struct OverlapScores {
 #[pymethods]
 impl OverlapScores {
     #[getter]
-    fn scores(&self) -> HashMap<(i64, Option<u32>), u32> {
+    fn scores(&self) -> HashMap<(i64, u32), u32> {
         // Return scores with full WorkerWithDpRank granularity as (worker_id, dp_rank) tuples
         self.inner
             .scores
@@ -532,13 +532,13 @@ impl ApproxKvIndexer {
         })
     }
 
-    #[pyo3(signature = (tokens, worker_id, dp_rank=None))]
+    #[pyo3(signature = (tokens, worker_id, dp_rank=0))]
     fn process_routing_decision_for_request<'p>(
         &self,
         py: Python<'p>,
         tokens: Vec<u32>,
         worker_id: i64,
-        dp_rank: Option<u32>,
+        dp_rank: u32,
     ) -> PyResult<Bound<'p, PyAny>> {
         let indexer = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {

@@ -1374,7 +1374,7 @@ mod tests {
             event: KvCacheEvent {
                 event_id,
                 data: add_blocks(hashes, parent),
-                dp_rank: None,
+                dp_rank: 0,
             },
         }
     }
@@ -1390,7 +1390,7 @@ mod tests {
                         .map(|i| ExternalSequenceBlockHash(*i * 100))
                         .collect(),
                 }),
-                dp_rank: None,
+                dp_rank: 0,
             },
         }
     }
@@ -2140,7 +2140,7 @@ mod tests {
                     tokens_hash: LocalBlockHash(13226331709069118873),
                 }],
             }),
-            dp_rank: None,
+            dp_rank: 0,
         };
         let router_event = RouterEvent::new(worker_id, kv_cache_event);
 

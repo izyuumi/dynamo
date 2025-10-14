@@ -299,12 +299,11 @@ async def init(runtime: DistributedRuntime, config: Config):
         runtime_config.tool_call_parser = config.tool_call_parser
         runtime_config.reasoning_parser = config.reasoning_parser
 
-        # Get data_parallel_size from vllm_config
+        # Get data_parallel_size from vllm_config (defaults to 1)
         data_parallel_size = getattr(
-            vllm_config.parallel_config, "data_parallel_size", None
+            vllm_config.parallel_config, "data_parallel_size", 1
         )
-        if data_parallel_size and data_parallel_size > 1:
-            runtime_config.data_parallel_size = data_parallel_size
+        runtime_config.data_parallel_size = data_parallel_size
 
         await register_llm(
             ModelInput.Tokens,
