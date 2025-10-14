@@ -5,6 +5,27 @@ use crate::tokens::{SequenceHash, Token};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// A worker identifier combined with its optional data parallel rank.
+/// Used for routing decisions in data parallel setups.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct WorkerWithDpRank {
+    pub worker_id: i64,
+    pub dp_rank: Option<u32>,
+}
+
+impl WorkerWithDpRank {
+    pub fn new(worker_id: i64, dp_rank: Option<u32>) -> Self {
+        Self { worker_id, dp_rank }
+    }
+
+    pub fn from_worker_id(worker_id: i64) -> Self {
+        Self {
+            worker_id,
+            dp_rank: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum RouterRequest {
@@ -33,8 +54,8 @@ pub enum RouterResponse {
 
 #[derive(Debug)]
 pub struct WorkerSelectionResult {
-    /// The worker id of the selected worker
-    pub worker_id: i64,
+    /// The full worker information including dp_rank
+    pub worker: WorkerWithDpRank,
 
     /// The total number of blocks required to prefill the request
     pub required_blocks: u64,
@@ -155,7 +176,7 @@ pub enum PrefillEventData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ActiveSequenceEvent {
     pub request_id: String,
-    pub worker_id: i64,
+    pub worker: WorkerWithDpRank,
     pub data: ActiveSequenceEventData,
     pub router_id: Uuid,
 }
@@ -199,6 +220,9 @@ pub struct KvCacheEvent {
     pub event_id: u64,
     /// The data associated with the event.
     pub data: KvCacheEventData,
+    /// The optional data parallel rank of the worker emitting this event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dp_rank: Option<u32>,
 }
 
 /// Represents the data associated with a cache event.
@@ -313,6 +337,7 @@ mod tests {
         let event = KvCacheEvent {
             event_id: 1,
             data: event_data,
+            dp_rank: None,
         };
 
         let events = KvCacheEvents {

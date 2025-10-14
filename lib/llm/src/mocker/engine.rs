@@ -283,6 +283,7 @@ impl MockVllmEngine {
                             let event = KvCacheEvent {
                                 event_id: Uuid::new_v4().as_u128() as u64,
                                 data: event_data,
+                                dp_rank: Some(dp_rank),
                             };
 
                             // Publish the event

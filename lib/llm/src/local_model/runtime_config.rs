@@ -19,6 +19,10 @@ pub struct ModelRuntimeConfig {
 
     pub reasoning_parser: Option<String>,
 
+    /// Total number of data parallel ranks for this worker (used with data parallelism)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_parallel_size: Option<u32>,
+
     /// Mapping of engine-specific runtime configs
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub runtime_data: HashMap<String, serde_json::Value>,

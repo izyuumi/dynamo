@@ -234,13 +234,20 @@ impl Drop for ZmqKvEventListener {
 pub(crate) struct KvEventPublisher {
     inner: Arc<llm_rs::kv_router::publisher::KvEventPublisher>,
     kv_block_size: usize,
+    dp_rank: Option<u32>,
     warning_count: Arc<AtomicU32>,
 }
 
 #[pymethods]
 impl KvEventPublisher {
     #[new]
-    fn new(component: Component, worker_id: i64, kv_block_size: usize) -> PyResult<Self> {
+    #[pyo3(signature = (component, worker_id, kv_block_size, dp_rank=None))]
+    fn new(
+        component: Component,
+        worker_id: i64,
+        kv_block_size: usize,
+        dp_rank: Option<u32>,
+    ) -> PyResult<Self> {
         if kv_block_size == 0 {
             return Err(to_pyerr(anyhow::anyhow!("kv_block_size cannot be 0")));
         }
@@ -256,6 +263,7 @@ impl KvEventPublisher {
         Ok(Self {
             inner: inner.into(),
             kv_block_size,
+            dp_rank,
             warning_count: Arc::new(AtomicU32::new(0)),
         })
     }
@@ -286,6 +294,7 @@ impl KvEventPublisher {
                     &self.warning_count,
                 ),
             }),
+            dp_rank: self.dp_rank,
         };
 
         self.inner.publish(event).map_err(to_pyerr)
@@ -299,6 +308,7 @@ impl KvEventPublisher {
         let event = KvCacheEvent {
             event_id,
             data: KvCacheEventData::Removed(KvCacheRemoveData { block_hashes }),
+            dp_rank: self.dp_rank,
         };
 
         self.inner.publish(event).map_err(to_pyerr)
@@ -315,7 +325,12 @@ pub(crate) struct OverlapScores {
 impl OverlapScores {
     #[getter]
     fn scores(&self) -> HashMap<llm_rs::kv_router::indexer::WorkerId, u32> {
-        self.inner.scores.clone()
+        // Aggregate scores over dp_ranks - sum up scores for the same worker_id
+        let mut aggregated: HashMap<llm_rs::kv_router::indexer::WorkerId, u32> = HashMap::new();
+        for (worker, score) in &self.inner.scores {
+            *aggregated.entry(worker.worker_id).or_insert(0) += score;
+        }
+        aggregated
     }
 
     #[getter]
@@ -517,16 +532,19 @@ impl ApproxKvIndexer {
         })
     }
 
+    #[pyo3(signature = (tokens, worker_id, dp_rank=None))]
     fn process_routing_decision_for_request<'p>(
         &self,
         py: Python<'p>,
         tokens: Vec<u32>,
         worker_id: i64,
+        dp_rank: Option<u32>,
     ) -> PyResult<Bound<'p, PyAny>> {
         let indexer = self.inner.clone();
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let worker = llm_rs::kv_router::protocols::WorkerWithDpRank::new(worker_id, dp_rank);
             indexer
-                .process_routing_decision_for_request(tokens.as_slice(), worker_id)
+                .process_routing_decision_for_request(tokens.as_slice(), worker)
                 .await
                 .map_err(to_pyerr)?;
             Ok(())
@@ -1130,9 +1148,24 @@ impl KvPushRouter {
                 .await
                 .map_err(to_pyerr)?;
 
+            // Aggregate loads over dp_ranks - sum up loads for the same worker_id
+            let mut aggregated: HashMap<i64, llm_rs::kv_router::scheduler::PotentialLoad> =
+                HashMap::new();
+            for load in loads {
+                aggregated
+                    .entry(load.worker_id)
+                    .and_modify(|e| {
+                        e.potential_prefill_tokens += load.potential_prefill_tokens;
+                        e.potential_decode_blocks += load.potential_decode_blocks;
+                    })
+                    .or_insert(load);
+            }
+
+            let aggregated_loads: Vec<_> = aggregated.into_values().collect();
+
             // Use pythonize to convert Vec<PotentialLoad> to Python list of dicts
             Python::with_gil(|py| {
-                pythonize(py, &loads)
+                pythonize(py, &aggregated_loads)
                     .map(|obj| obj.unbind())
                     .map_err(to_pyerr)
             })

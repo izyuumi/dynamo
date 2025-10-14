@@ -50,6 +50,7 @@ mod tests {
             KvCacheEvent {
                 event_id,
                 data: add_blocks(hashes, parent),
+                dp_rank: None,
             },
         )
     }
@@ -65,6 +66,7 @@ mod tests {
                         .map(|i| ExternalSequenceBlockHash(*i * 100))
                         .collect(),
                 }),
+                dp_rank: None,
             },
         )
     }

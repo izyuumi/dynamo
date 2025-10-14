@@ -38,7 +38,9 @@ use crate::{
             KvIndexer, KvIndexerInterface, KvRouterError, OverlapScores, RouterEvent,
             compute_block_hash_for_seq, compute_seq_hash_for_block,
         },
-        protocols::{LocalBlockHash, RouterRequest, RouterResponse, WorkerSelectionResult},
+        protocols::{
+            LocalBlockHash, RouterRequest, RouterResponse, WorkerSelectionResult, WorkerWithDpRank,
+        },
         scheduler::{KvScheduler, KvSchedulerError, PotentialLoad, SchedulingRequest},
         scoring::ProcessedEndpoints,
         subscriber::start_kv_router_background,
@@ -350,7 +352,7 @@ impl KvRouter {
                 (false, false) => (None, None),
             };
 
-        let best_worker_id = self
+        let best_worker = self
             .scheduler
             .schedule(
                 context_id.map(|s| s.to_string()),
@@ -364,17 +366,17 @@ impl KvRouter {
 
         if let Indexer::ApproxKvIndexer(ref indexer) = self.indexer {
             indexer
-                .process_routing_decision(best_worker_id, block_hashes, maybe_seq_hashes_1.unwrap())
+                .process_routing_decision(best_worker, block_hashes, maybe_seq_hashes_1.unwrap())
                 .await
                 .unwrap();
         };
 
         let overlap_amount = overlap_scores
             .scores
-            .get(&best_worker_id)
+            .get(&best_worker)
             .copied()
             .unwrap_or(0);
-        Ok((best_worker_id, overlap_amount))
+        Ok((best_worker.worker_id, overlap_amount))
     }
 
     pub async fn add_request(
@@ -382,7 +384,7 @@ impl KvRouter {
         request_id: String,
         tokens: &[u32],
         overlap_blocks: u32,
-        worker_id: i64,
+        worker: WorkerWithDpRank,
     ) {
         let isl_tokens = tokens.len();
 
@@ -397,7 +399,7 @@ impl KvRouter {
                 maybe_seq_hashes,
                 isl_tokens,
                 overlap_blocks,
-                worker_id,
+                worker,
             )
             .await;
     }
@@ -526,8 +528,9 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
                 let (instance_id, overlap_amount) = if let Some(id) = request.backend_instance_id {
                     // If instance_id is set, use it and manually add the request to track it
                     if !query_instance_id {
+                        let worker = WorkerWithDpRank::new(id, request.dp_rank);
                         self.chooser
-                            .add_request(context_id.clone(), &request.token_ids, 0, id)
+                            .add_request(context_id.clone(), &request.token_ids, 0, worker)
                             .await;
                     }
                     (id, 0)
