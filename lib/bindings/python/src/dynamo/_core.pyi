@@ -778,16 +778,21 @@ class KvEventPublisher:
     ...
 
     def __init__(
-        self, component: Component, worker_id: int, kv_block_size: int
+        self, component: Component, worker_id: int, kv_block_size: int, dp_rank: int = 0
     ) -> None:
         """
         Create a `KvEventPublisher` object
+
+        Args:
+            component: The component to publish events for
+            worker_id: The worker ID
+            kv_block_size: The KV block size (must be > 0)
+            dp_rank: The data parallel rank (defaults to 0)
         """
 
     def publish_stored(
         self,
-        event_id,
-        int,
+        event_id: int,
         token_ids: List[int],
         num_block_tokens: List[int],
         block_hashes: List[int],
@@ -796,12 +801,24 @@ class KvEventPublisher:
     ) -> None:
         """
         Publish a KV stored event.
+
+        Args:
+            event_id: The event ID
+            token_ids: List of token IDs
+            num_block_tokens: Number of tokens per block
+            block_hashes: List of block hashes (signed 64-bit integers)
+            lora_id: The LoRA ID
+            parent_hash: Optional parent hash (signed 64-bit integer)
         """
         ...
 
-    def publish_removed(self, event_id, int, block_hashes: List[int]) -> None:
+    def publish_removed(self, event_id: int, block_hashes: List[int]) -> None:
         """
         Publish a KV removed event.
+
+        Args:
+            event_id: The event ID
+            block_hashes: List of block hashes to remove (signed 64-bit integers)
         """
         ...
 
