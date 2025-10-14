@@ -5,7 +5,6 @@ import asyncio
 import logging
 import os
 import signal
-from typing import Optional
 
 import uvloop
 from vllm.distributed.kv_events import ZmqEventPublisher
