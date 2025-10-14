@@ -171,6 +171,7 @@ func TestVLLMBackend_ShellCommandInjection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			expectedCommand := append([]string{}, tt.initialContainer.Command...)
 
 			backend.UpdateContainer(tt.initialContainer, tt.numberOfNodes, tt.role, &v1alpha1.DynamoComponentDeploymentSharedSpec{}, "test-service", tt.multinodeDeployer)
 
@@ -178,7 +179,6 @@ func TestVLLMBackend_ShellCommandInjection(t *testing.T) {
 				t.Errorf("UpdateContainer() args = %v, want %v", tt.initialContainer.Args, tt.expectedArgs)
 			}
 
-			expectedCommand := tt.initialContainer.Command
 			if !reflect.DeepEqual(tt.initialContainer.Command, expectedCommand) {
 				t.Errorf("UpdateContainer() should preserve shell command, got: %v, want: %v", tt.initialContainer.Command, expectedCommand)
 			}
