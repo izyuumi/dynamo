@@ -46,4 +46,3 @@ data:
           - pluginRef: dyn-kv
             weight: 1
           - pluginRef: picker
-

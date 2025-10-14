@@ -1,12 +1,12 @@
 # Dynamo model serving recipes
 
-| Model family  | Backend | Mode                | Deployment | Benchmark |
-|---------------|---------|---------------------|------------|-----------|
-| llama-3-70b   | vllm    | agg                 |     ✓      |     ✓     |
-| llama-3-70b   | vllm    | disagg-multi-node   |     ✓      |     ✓     |
-| llama-3-70b   | vllm    | disagg-single-node  |     ✓      |     ✓     |
-| oss-gpt       | trtllm  | aggregated          |     ✓      |     ✓     |
-| DeepSeek-R1   | sglang  | disaggregated       |     ✓      |    🚧     |
+| Model family  | Backend | Mode                | Deployment | Benchmark | GAIE-integration |
+|---------------|---------|---------------------|------------|-----------|------------------|
+| llama-3-70b   | vllm    | agg                 |     ✓      |     ✓     |        ✓         |
+| llama-3-70b   | vllm    | disagg-multi-node   |     ✓      |     ✓     |                  |
+| llama-3-70b   | vllm    | disagg-single-node  |     ✓      |     ✓     |                  |
+| oss-gpt       | trtllm  | aggregated          |     ✓      |     ✓     |                  |
+| DeepSeek-R1   | sglang  | disaggregated       |     ✓      |    🚧     |                  |
 
 
 ## Prerequisites
@@ -72,8 +72,12 @@ Example:
 
 ## If deploying with Gateway API Inference extension GAIE
 
+1. Follow [Deploy Inference Gateway section 2](../deploy/inference-gateway/README.md#2-deploy-inference-gateway) to install GAIE.
+
+2. Apply manifests by running a script.
+
 ```bash
-# Match the block size to the cli value  in your deployment file deploy.yaml: - "python3 -m dynamo.vllm ... --block-size 128"
+# Match the block size to the cli value in your deployment file deploy.yaml: - "python3 -m dynamo.vllm ... --block-size 128"
 export DYNAMO_KV_BLOCK_SIZE=128
 export EPP_IMAGE=nvcr.io/you/epp:tag
 # Add --gaie argument to the script i.e.:
