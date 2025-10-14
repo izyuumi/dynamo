@@ -1316,35 +1316,38 @@ def test_query_instance_id_returns_worker_and_tokens(
 @pytest.mark.pre_merge
 @pytest.mark.model(MODEL_NAME)
 def test_router_decisions(request, runtime_services, predownload_tokenizers):
-    """Validate KV cache prefix reuse by sending progressive requests with overlapping prefixes.
+    """Validate KV cache prefix reuse and dp_rank routing by sending progressive requests with overlapping prefixes.
 
     Flow:
-      - Start one mocker worker with dp_size=2.
-      - Wait for worker to be ready.
+      - Start two mocker workers, each with dp_size=4 (8 total dp ranks).
+      - Wait for workers to be ready.
       - Send 4 progressive requests, each extending the previous tokens:
-        * Request 1: BLOCK_SIZE random tokens
-        * Request 2: Request 1 tokens + BLOCK_SIZE new random tokens
-        * Request 3: Request 2 tokens + BLOCK_SIZE new random tokens
-        * Request 4: Request 3 tokens + BLOCK_SIZE new random tokens
+        * Request 1: BLOCK_SIZE random tokens (forced to specific worker_id and dp_rank=1)
+        * Request 2: Request 1 tokens + BLOCK_SIZE new random tokens (naturally routed)
+        * Request 3: Request 2 tokens + BLOCK_SIZE new random tokens (naturally routed)
+        * Request 4: Request 3 tokens + BLOCK_SIZE new random tokens (naturally routed)
       - Dump events from router and verify:
-        * All but one dp_rank should have no events (one dp_rank handles all due to prefix reuse)
-        * The dp_rank with events should have exactly 4 events (one per request)
+        * All but one (worker_id, dp_rank) should have no events (due to prefix reuse)
+        * The (worker_id, dp_rank) with events should have exactly 4 events (one per request)
+        * All events should be on the forced (worker_id, dp_rank=1) (verifying forced routing and prefix reuse)
     """
 
     # runtime_services starts etcd and nats
     logger.info("Starting test router prefix reuse and KV events synchronization")
 
-    # Create mocker args dictionary with dp_size=2
+    # Create mocker args dictionary with dp_size=4
     mocker_args = {
         "speedup_ratio": SPEEDUP_RATIO,
         "block_size": BLOCK_SIZE,
-        "dp_size": 2,
+        "dp_size": 4,
     }
 
     try:
-        # Start single mocker instance with dp_size=2
-        logger.info("Starting 1 mocker instance with dp_size=2")
-        mockers = MockerProcess(request, mocker_args=mocker_args, num_mockers=1)
+        # Start 2 mocker instances, each with dp_size=4 (8 total dp ranks)
+        logger.info(
+            "Starting 2 mocker instances with dp_size=4 each (8 total dp ranks)"
+        )
+        mockers = MockerProcess(request, mocker_args=mocker_args, num_mockers=2)
         logger.info(f"All mockers using endpoint: {mockers.endpoint}")
         # Initialize mockers
         mockers.__enter__()
@@ -1368,9 +1371,17 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
         async def test_sync():
             # Wait for workers to be ready and get their instance IDs
             mocker_worker_ids = await wait_for_mockers_ready(
-                endpoint, kv_push_router, expected_num_workers=1
+                endpoint, kv_push_router, expected_num_workers=2
             )
             logger.info(f"Workers ready: {mocker_worker_ids}")
+
+            # Use the first worker_id for forced routing
+            forced_worker_id = mocker_worker_ids[0]
+            forced_dp_rank = 1
+
+            logger.info(
+                f"Will force first request to worker_id={forced_worker_id}, dp_rank={forced_dp_rank}"
+            )
 
             # Send 4 progressive requests with overlapping prefixes
             cumulative_tokens = []
@@ -1380,9 +1391,14 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
                 new_tokens = [random.randint(1, 10000) for _ in range(BLOCK_SIZE)]
                 cumulative_tokens.extend(new_tokens)
 
+                # Force first request to specific worker_id and dp_rank=1, let subsequent requests follow naturally
+                worker_id_override = forced_worker_id if i == 0 else None
+                dp_rank_override = forced_dp_rank if i == 0 else None
+
                 logger.info(
                     f"Sending request {i + 1}/4 with {len(cumulative_tokens)} tokens "
                     f"(added {len(new_tokens)} new tokens)"
+                    f"{f' - FORCING worker_id={worker_id_override}, dp_rank={dp_rank_override}' if worker_id_override is not None else ''}"
                 )
 
                 await send_request_via_python_kv_router(
@@ -1394,6 +1410,8 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
                         "ignore_eos": True,  # Don't stop on EOS token
                         "max_tokens": 2,  # Generate exactly 2 tokens
                     },
+                    worker_id=worker_id_override,
+                    dp_rank=dp_rank_override,
                 )
 
                 # Wait a bit between requests
@@ -1404,10 +1422,10 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
 
             # Dump events from the router
             events_json = await kv_push_router.dump_events()
-            return events_json
+            return events_json, forced_worker_id, forced_dp_rank
 
         # Run the async test
-        events_json = asyncio.run(test_sync())
+        events_json, expected_worker_id, expected_dp_rank = asyncio.run(test_sync())
 
         # Parse events and count by (worker_id, dp_rank)
         events = json.loads(events_json)
@@ -1445,8 +1463,23 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
             f"but found {num_events} events"
         )
 
+        # Verify: Both worker_id and dp_rank should match the forced values
+        active_worker_id = active_worker_dp[0]
+        active_dp_rank = active_worker_dp[1]
+
+        assert active_worker_id == expected_worker_id, (
+            f"Expected all events to have worker_id={expected_worker_id} (forced in first request), "
+            f"but found worker_id={active_worker_id}"
+        )
+
+        assert active_dp_rank == expected_dp_rank, (
+            f"Expected all events to have dp_rank={expected_dp_rank} (forced in first request), "
+            f"but found dp_rank={active_dp_rank}"
+        )
+
         logger.info(
-            f"Successfully verified: Worker {active_worker_dp[0]} dp_rank {active_worker_dp[1]} handled all 4 requests with prefix reuse. "
+            f"Successfully verified: Worker {active_worker_id} dp_rank {active_dp_rank} handled all 4 requests with prefix reuse. "
+            f"All events correctly routed to worker_id={expected_worker_id}, dp_rank={expected_dp_rank} as expected. "
             f"KV events synchronized correctly."
         )
 

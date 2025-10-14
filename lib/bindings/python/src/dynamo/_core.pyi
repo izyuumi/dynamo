@@ -1192,6 +1192,7 @@ class KvPushRouter:
         output_options: Optional[JsonLike] = None,
         router_config_override: Optional[JsonLike] = None,
         worker_id: Optional[int] = None,
+        dp_rank: Optional[int] = None,
     ) -> AsyncIterator[JsonLike]:
         """
         Generate text using the KV-aware router.
@@ -1206,6 +1207,10 @@ class KvPushRouter:
             worker_id: Optional worker ID to route to directly. If set, the request
                       will be sent to this specific worker and router states will be
                       updated accordingly.
+            dp_rank: Optional data parallel rank to route to. If set along with worker_id,
+                    the request will be routed to the specific (worker_id, dp_rank) pair.
+                    If only dp_rank is set, the router will select the best worker but
+                    force routing to the specified dp_rank.
 
         Returns:
             An async iterator yielding generation responses
@@ -1213,6 +1218,8 @@ class KvPushRouter:
         Note:
             - If worker_id is set, the request bypasses KV matching and routes directly
               to the specified worker while still updating router states.
+            - dp_rank allows targeting a specific data parallel replica when workers have
+              multiple replicas (data_parallel_size > 1).
             - This is different from query_instance_id which doesn't route the request.
         """
         ...

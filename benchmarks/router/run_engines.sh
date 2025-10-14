@@ -192,10 +192,15 @@ for i in $(seq 1 $NUM_WORKERS); do
 
         if [ "$USE_MOCKERS" = true ]; then
             # Run mocker engine (no GPU assignment needed)
-            exec python -m dynamo.mocker \
-                --model-path "$MODEL_PATH" \
-                --endpoint dyn://test.mocker.generate \
-                "${EXTRA_ARGS[@]}"
+            MOCKER_ARGS=()
+            MOCKER_ARGS+=("--model-path" "$MODEL_PATH")
+            MOCKER_ARGS+=("--endpoint" "dyn://test.mocker.generate")
+            if [ "$DATA_PARALLEL_SIZE" -gt 1 ]; then
+                MOCKER_ARGS+=("--data-parallel-size" "$DATA_PARALLEL_SIZE")
+            fi
+            MOCKER_ARGS+=("${EXTRA_ARGS[@]}")
+
+            exec python -m dynamo.mocker "${MOCKER_ARGS[@]}"
         elif [ "$USE_TRTLLM" = true ]; then
             echo "[$MODE_CAPITALIZED Worker-$i] Using GPUs: $GPU_DEVICES"
             # Run TensorRT-LLM engine with trtllm-llmapi-launch for proper initialization
