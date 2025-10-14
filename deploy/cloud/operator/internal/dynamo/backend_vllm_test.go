@@ -88,12 +88,14 @@ func TestVLLMBackend_UpdateContainer(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			g := gomega.NewGomegaWithT(t)
 
+			initialContainerArgs := append([]string{}, tt.initialContainer.Args...)
+
 			// Call UpdateContainer
 			backend.UpdateContainer(tt.initialContainer, tt.numberOfNodes, tt.role, tt.component, "test-service", tt.multinodeDeployer)
 
 			if tt.expectNotModified {
 				// Args should not have changed
-				g.Expect(tt.initialContainer.Args).To(gomega.Equal(tt.initialContainer.Args))
+				g.Expect(tt.initialContainer.Args).To(gomega.Equal(initialContainerArgs))
 			} else if tt.expectedArgs != nil {
 				// Check exact match
 				g.Expect(tt.initialContainer.Args).To(gomega.Equal(tt.expectedArgs))
