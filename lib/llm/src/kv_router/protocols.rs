@@ -47,9 +47,18 @@ impl Default for RouterRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum RouterResponse {
-    New { worker_id: i64, overlap_blocks: u32 },
-    PrefillMarked { success: bool },
-    FreeMarked { success: bool },
+    New {
+        worker_id: i64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dp_rank: Option<u32>,
+        overlap_blocks: u32,
+    },
+    PrefillMarked {
+        success: bool,
+    },
+    FreeMarked {
+        success: bool,
+    },
 }
 
 #[derive(Debug)]

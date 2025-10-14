@@ -458,6 +458,7 @@ impl AsyncEngine<SingleIn<RouterRequest>, ManyOut<Annotated<RouterResponse>>, Er
 
                 RouterResponse::New {
                     worker_id: best_worker.worker_id,
+                    dp_rank: best_worker.dp_rank,
                     overlap_blocks,
                 }
             }
