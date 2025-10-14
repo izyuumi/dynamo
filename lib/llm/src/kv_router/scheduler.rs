@@ -26,6 +26,8 @@ use crate::tokens::SequenceHash;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KVHitRateEvent {
     pub worker_id: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dp_rank: Option<u32>,
     pub isl_blocks: usize,
     pub overlap_blocks: u32,
 }
@@ -230,6 +232,7 @@ impl KvScheduler {
                     Ok(selection) => {
                         let event = KVHitRateEvent {
                             worker_id: selection.worker.worker_id,
+                            dp_rank: selection.worker.dp_rank,
                             isl_blocks: selection.required_blocks as usize,
                             overlap_blocks: selection.overlap_blocks,
                         };
@@ -503,13 +506,15 @@ impl WorkerSelector for DefaultWorkerSelector {
                 .and_then(|c| c.data_parallel_size)
                 .unwrap_or(1);
 
-            // Iterate over all dp_ranks for this worker
+            // Build list of dp_rank options to try: [None, Some(0), Some(1), ...]
+            // This ensures we check for workers without DP (None) and all DP ranks
+            let mut dp_ranks_to_check = vec![None];
             for dp_rank_idx in 0..data_parallel_size {
-                let dp_rank = if data_parallel_size > 1 {
-                    Some(dp_rank_idx)
-                } else {
-                    None
-                };
+                dp_ranks_to_check.push(Some(dp_rank_idx));
+            }
+
+            // Iterate over all dp_rank possibilities for this worker
+            for dp_rank in dp_ranks_to_check {
                 let worker = WorkerWithDpRank::new(*worker_id, dp_rank);
 
                 // Get overlap for this worker (defaults to 0 if not in overlaps)
