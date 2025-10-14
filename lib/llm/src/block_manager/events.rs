@@ -1,9 +1,22 @@
 // SPDX-FileCopyrightText: Copyright (c) 2024-2025 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 
 use super::block::registry::RegistrationHandle;
+use crate::kv_router::{
+    protocols::{
+        ExternalSequenceBlockHash, KvCacheEvent, KvCacheEventData, KvCacheRemoveData,
+        KvCacheStoreData, KvCacheStoredBlockData, LocalBlockHash,
+    },
+    publisher::KvEventPublisher,
+};
+
+#[cfg(any(test, feature = "testing-full"))]
+use tokio::sync::mpsc;
 
 /// The [EventManager] is not responsible for managing the history of the blocks, nor what
 /// events have been published.
@@ -143,23 +156,20 @@ impl EventReleaseManager for NullEventManager {
 
 /// Event manager that emits KV cache events to the indexer.
 pub struct DynamoEventManager {
-    event_id_counter: std::sync::atomic::AtomicU64,
+    event_id_counter: AtomicU64,
     /// KV event publisher for publishing events to the indexer
     publisher: PublisherImpl,
 }
 
 /// Publisher implementation - can be real or mock for testing
 enum PublisherImpl {
-    Real(Arc<crate::kv_router::publisher::KvEventPublisher>),
+    Real(Arc<KvEventPublisher>),
     #[cfg(any(test, feature = "testing-full"))]
-    Mock(tokio::sync::mpsc::UnboundedSender<crate::kv_router::protocols::KvCacheEvent>),
+    Mock(mpsc::UnboundedSender<KvCacheEvent>),
 }
 
 impl PublisherImpl {
-    fn publish(
-        &self,
-        event: crate::kv_router::protocols::KvCacheEvent,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    fn publish(&self, event: KvCacheEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match self {
             PublisherImpl::Real(publisher) => publisher
                 .publish(event)
@@ -174,9 +184,9 @@ impl PublisherImpl {
 
 impl DynamoEventManager {
     /// Create a DynamoEventManager with a KV event publisher.
-    pub fn new(publisher: Arc<crate::kv_router::publisher::KvEventPublisher>) -> Arc<Self> {
+    pub fn new(publisher: Arc<KvEventPublisher>) -> Arc<Self> {
         Arc::new(Self {
-            event_id_counter: std::sync::atomic::AtomicU64::new(0),
+            event_id_counter: AtomicU64::new(0),
             publisher: PublisherImpl::Real(publisher),
         })
     }
@@ -184,22 +194,17 @@ impl DynamoEventManager {
     /// Create a test DynamoEventManager that uses channels instead of NATS.
     /// Returns the manager and a receiver to verify emitted events.
     #[cfg(any(test, feature = "testing-full"))]
-    pub fn new_test() -> (
-        Arc<Self>,
-        tokio::sync::mpsc::UnboundedReceiver<crate::kv_router::protocols::KvCacheEvent>,
-    ) {
-        use tokio::sync::mpsc;
+    pub fn new_test() -> (Arc<Self>, mpsc::UnboundedReceiver<KvCacheEvent>) {
         let (tx, rx) = mpsc::unbounded_channel();
         let manager = Arc::new(Self {
-            event_id_counter: std::sync::atomic::AtomicU64::new(0),
+            event_id_counter: AtomicU64::new(0),
             publisher: PublisherImpl::Mock(tx),
         });
         (manager, rx)
     }
 
     fn next_event_id(&self) -> u64 {
-        self.event_id_counter
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        self.event_id_counter.fetch_add(1, Ordering::SeqCst)
     }
 }
 
@@ -213,11 +218,6 @@ impl EventManager for DynamoEventManager {}
 
 impl EventPublisher for DynamoEventManager {
     fn publish(&self, handles: Vec<Arc<RegistrationHandle>>) {
-        use crate::kv_router::protocols::{
-            ExternalSequenceBlockHash, KvCacheEvent, KvCacheEventData, KvCacheStoreData,
-            KvCacheStoredBlockData, LocalBlockHash,
-        };
-
         if handles.is_empty() {
             return;
         }
@@ -225,7 +225,7 @@ impl EventPublisher for DynamoEventManager {
         let parent_hash = handles
             .first()
             .and_then(|h| h.parent_sequence_hash())
-            .map(|hash| ExternalSequenceBlockHash(hash));
+            .map(ExternalSequenceBlockHash);
 
         let blocks: Vec<KvCacheStoredBlockData> = handles
             .iter()
@@ -254,10 +254,6 @@ impl EventPublisher for DynamoEventManager {
 
 impl EventReleaseManager for DynamoEventManager {
     fn block_release(&self, registration_handle: &RegistrationHandle) {
-        use crate::kv_router::protocols::{
-            ExternalSequenceBlockHash, KvCacheEvent, KvCacheEventData, KvCacheRemoveData,
-        };
-
         let sequence_hash = registration_handle.sequence_hash();
 
         let remove_data = KvCacheRemoveData {

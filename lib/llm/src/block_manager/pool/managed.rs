@@ -59,9 +59,9 @@ use inactive::InactiveBlockPool;
 pub struct ManagedBlockPoolArgs<S: Storage, L: LocalityProvider, M: BlockMetadata> {
     /// Event manager for publishing block registration and removal events.
     ///
-    /// **Defaults to `DynamoEventManager`** which logs KV cache events (STORE/REMOVE).
-    ///
-    /// To disable event logging, explicitly provide `NullEventManager::new()`.
+    /// If not provided here, the BlockManager will choose:
+    /// - `DynamoEventManager` when a `kv_event_publisher` is present in the runtime config, or
+    /// - `NullEventManager` (no op event manager) otherwise.
     #[builder(default = "None", setter(strip_option))]
     event_manager: Option<Arc<dyn EventManager>>,
 
