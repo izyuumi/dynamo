@@ -72,7 +72,7 @@ Example:
 
 ## If deploying with Gateway API Inference extension GAIE
 
-1. Follow [Deploy Inference Gateway section 2](../deploy/inference-gateway/README.md#2-deploy-inference-gateway) to install GAIE.
+1. Follow [Deploy Inference Gateway Section 2](../deploy/inference-gateway/README.md#2-deploy-inference-gateway) to install GAIE.
 
 2. Apply manifests by running a script.
 
