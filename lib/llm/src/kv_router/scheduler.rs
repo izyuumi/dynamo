@@ -119,14 +119,10 @@ impl KvScheduler {
             Arc::new(RwLock::new(initial_map))
         };
 
-        let worker_ids: Vec<i64> = instances
-            .iter()
-            .map(|instance| instance.instance_id)
-            .collect();
         let slots = Arc::new(ActiveSequencesMultiWorker::new(
             component.clone(),
             block_size as usize,
-            worker_ids,
+            workers_with_configs.read().await.clone(),
             replica_sync,
             router_uuid,
         ));
@@ -164,24 +160,23 @@ impl KvScheduler {
                 let new_instances = instances_monitor_rx.borrow_and_update().clone();
                 let new_configs = configs_monitor_rx.borrow_and_update().clone();
 
-                // Update workers when instances change
-                let worker_ids: Vec<i64> = new_instances
-                    .iter()
-                    .map(|instance| instance.instance_id)
-                    .collect();
-                slots_monitor.update_workers(worker_ids);
-
-                // Update the shared workers_with_configs
-                let mut workers_map = workers_monitor.write().await;
-                workers_map.clear();
+                // Build the new workers_with_configs map
+                let mut new_workers_with_configs = HashMap::new();
                 for instance in &new_instances {
                     let worker_id = instance.instance_id;
                     let config = new_configs.get(&worker_id).cloned();
                     if config.is_some() {
                         tracing::info!("Runtime config found for worker_id: {}", worker_id);
                     }
-                    workers_map.insert(worker_id, config);
+                    new_workers_with_configs.insert(worker_id, config);
                 }
+
+                // Update workers when instances change
+                slots_monitor.update_workers(new_workers_with_configs.clone());
+
+                // Update the shared workers_with_configs
+                let mut workers_map = workers_monitor.write().await;
+                *workers_map = new_workers_with_configs;
                 tracing::trace!(
                     "Updated workers_with_configs with {} workers",
                     workers_map.len()
