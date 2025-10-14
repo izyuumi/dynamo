@@ -294,7 +294,7 @@ pub mod llm_kvbm {
                     let event = KvCacheEvent {
                         data,
                         event_id: event_id_counter,
-                        dp_rank: None,
+                        dp_rank: 0,
                     };
                     let router_event = RouterEvent::new(worker_identifier as i64, event);
                     event_id_counter += 1;
@@ -314,7 +314,7 @@ pub mod llm_kvbm {
                             block_hashes: vec![ExternalSequenceBlockHash(sequence_hash)],
                         }),
                         event_id: event_id_counter,
-                        dp_rank: None,
+                        dp_rank: 0,
                     };
                     let router_event = RouterEvent::new(worker_identifier as i64, event);
                     event_id_counter += 1;
@@ -575,7 +575,7 @@ mod tests {
                     }],
                     parent_hash: None,
                 }),
-                dp_rank: None,
+                dp_rank: 0,
             },
         );
 
@@ -590,7 +590,7 @@ mod tests {
                     }],
                     parent_hash: None,
                 }),
-                dp_rank: None,
+                dp_rank: 0,
             },
         );
 
@@ -634,7 +634,7 @@ mod tests {
                     }],
                     parent_hash: None,
                 }),
-                dp_rank: None,
+                dp_rank: 0,
             },
         );
 
@@ -683,7 +683,7 @@ mod tests {
                 data: KvCacheEventData::Removed(KvCacheRemoveData {
                     block_hashes: vec![ExternalSequenceBlockHash(4)],
                 }),
-                dp_rank: None,
+                dp_rank: 0,
             },
         );
 
