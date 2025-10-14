@@ -179,6 +179,19 @@ where
     <RB as StorageTypeProvider>::StorageType: NixlDescriptor,
     <WB as StorageTypeProvider>::StorageType: NixlDescriptor,
 {
+    // Check for empty slices early
+    if sources.is_empty() || targets.is_empty() {
+        tracing::warn!(
+            "handle_local_transfer called with empty slices \
+            (sources: {}, targets: {}), skipping transfer",
+            sources.len(),
+            targets.len()
+        );
+        let (tx, rx) = oneshot::channel();
+        tx.send(()).unwrap();
+        return Ok(rx);
+    }
+
     let (tx, rx) = oneshot::channel();
 
     match RB::write_to_strategy() {
