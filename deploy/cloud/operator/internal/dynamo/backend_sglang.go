@@ -59,7 +59,7 @@ func (b *SGLangBackend) UpdateContainer(container *corev1.Container, numberOfNod
 		return
 	}
 
-	injectFlagsIntoContainerCommand(container, flags, needsShell)
+	injectFlagsIntoContainerCommand(container, flags, needsShell, "sglang")
 }
 
 func (b *SGLangBackend) UpdatePodSpec(podSpec *corev1.PodSpec, numberOfNodes int32, role Role, component *v1alpha1.DynamoComponentDeploymentSharedSpec, serviceName string) {

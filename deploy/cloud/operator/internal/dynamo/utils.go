@@ -27,7 +27,7 @@ import (
  *
  * The needsShell flag indicates when environment variables require shell interpretation
  */
-func injectFlagsIntoContainerCommand(container *corev1.Container, flags string, needsShell bool) {
+func injectFlagsIntoContainerCommand(container *corev1.Container, flags string, needsShell bool, framework string) {
 	if len(container.Command) > 0 && isPythonCommand(container.Command[0]) {
 		// Direct python command case
 		if needsShell {
@@ -52,7 +52,7 @@ func injectFlagsIntoContainerCommand(container *corev1.Container, flags string, 
 	} else {
 		// Non-python command case - try injection on each arg individually
 		for i, arg := range container.Args {
-			modifiedArg := injectFlagsIntoPythonCommand(arg, flags)
+			modifiedArg := injectFlagsIntoPythonCommand(arg, flags, framework)
 			if modifiedArg != arg { // flags were successfully injected
 				container.Args[i] = modifiedArg
 				break // stop after first successful injection
@@ -61,10 +61,10 @@ func injectFlagsIntoContainerCommand(container *corev1.Container, flags string, 
 	}
 }
 
-func injectFlagsIntoPythonCommand(arg, flags string) string {
+func injectFlagsIntoPythonCommand(arg, flags string, framework string) string {
 	// Regex to match python commands that contain sglang
 	// Matches: python, python3, python3.11, etc. followed by sglang-related modules
-	pattern := `(python[0-9.]*\s+[^|&;]*sglang[^|&;]*?)(\s|$|[|&;])`
+	pattern := fmt.Sprintf(`(python[0-9.]*\s+[^|&;]*%s[^|&;]*?)(\s|$|[|&;])`, framework)
 
 	re := regexp.MustCompile(pattern)
 
