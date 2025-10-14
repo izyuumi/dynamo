@@ -27,11 +27,13 @@ class DynamoKVBMConnectorLeader(KvCacheConnectorScheduler):
 
         mappings = self._llm_args.parallel_config.to_mapping()
 
-        world_size = mappings.world_size
+        world_size = 1 if mappings.enable_attention_dp else mappings.world_size
         self.block_size = self._llm_args.kv_cache_config.tokens_per_block
 
+        module_id = str(mappings.rank) if mappings.enable_attention_dp else None
+
         # Set bytes_per_block to 0, because we will retrieve the actual value from the worker side.
-        leader = KvbmLeader(world_size, drt=self.drt)
+        leader = KvbmLeader(world_size, drt=self.drt, module_id=module_id)
 
         print(f"KvConnectorLeader initialized with rank: {mappings.rank}")
         self._connector = RustKvConnectorLeader(

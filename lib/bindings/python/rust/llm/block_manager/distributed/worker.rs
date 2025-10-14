@@ -143,7 +143,7 @@ impl KvbmWorker {
 #[pymethods]
 impl KvbmWorker {
     #[new]
-    #[pyo3(signature = (num_device_blocks, page_size, tensors, device_id=0, dtype_width_bytes=2, drt=None, layout_blocking=false, device_layout_type=None, host_layout_type=None, disk_layout_type=None))]
+    #[pyo3(signature = (num_device_blocks, page_size, tensors, device_id=0, dtype_width_bytes=2, drt=None, layout_blocking=false, device_layout_type=None, host_layout_type=None, disk_layout_type=None, module_id=None))]
     fn new(
         num_device_blocks: usize,
         page_size: usize,
@@ -155,6 +155,7 @@ impl KvbmWorker {
         device_layout_type: Option<PyLayoutType>,
         host_layout_type: Option<PyLayoutType>,
         disk_layout_type: Option<PyLayoutType>,
+        module_id: Option<String>,
     ) -> PyResult<Self> {
         let py_drt = drt.ok_or_else(|| {
             pyo3::exceptions::PyValueError::new_err("DistributedRuntime (drt) must be provided")
@@ -171,7 +172,7 @@ impl KvbmWorker {
             vllm_tensors.push(Arc::new(vllm_tensor));
         }
 
-        let barrier_id_prefix = get_barrier_id_prefix();
+        let barrier_id_prefix = get_barrier_id_prefix(module_id);
 
         let config = KvbmWorkerConfig::builder()
             .drt(drt)

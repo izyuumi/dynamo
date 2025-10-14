@@ -200,7 +200,7 @@ impl Worker for KvConnectorWorker {
             .tensors(vllm_tensors)
             .device_id(device_id)
             .dtype_width_bytes(dtype_width_bytes)
-            .barrier_id_prefix(get_barrier_id_prefix())
+            .barrier_id_prefix(get_barrier_id_prefix(None))
             .scheduler_client(Some(self.transfer_client.clone()))
             .device_layout_type(detected_device_layout_type)
             .host_layout_type(host_layout_type.unwrap_or(LayoutType::FullyContiguous))

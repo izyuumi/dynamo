@@ -18,8 +18,8 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
 
         self.drt = DistributedRuntime.detached()
 
-        mappings = self._llm_args.parallel_config.to_mapping()
-        self.rank = mappings.rank
+        self.mappings = self._llm_args.parallel_config.to_mapping()
+        self.rank = self.mappings.rank
 
         self._connector = RustKvConnectorWorker(self.drt, str(self.rank))
 
@@ -51,6 +51,8 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
 
         raw_event_handles = [event.cuda_event for event in self.events]
 
+        module_id = str(self.rank) if self.mappings.enable_attention_dp else None
+
         self._connector.register_kv_caches(
             num_device_blocks,
             page_size,
@@ -58,6 +60,7 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
             kv_cache_dtype.itemsize,
             kv_cache_tensor,
             raw_event_handles,
+            module_id,
         )
 
     def bind_connector_meta(self, metadata: object):

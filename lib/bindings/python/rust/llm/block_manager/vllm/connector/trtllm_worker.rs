@@ -33,6 +33,7 @@ pub trait Worker: Send + Sync {
         dtype_width_bytes: usize,
         kv_cache_tensor: Arc<VllmTensor>,
         raw_event_handles: Vec<u64>,
+        module_id: Option<String>,
     ) -> anyhow::Result<()>;
 
     fn bind_connector_meta(&mut self, metadata: Vec<u8>) -> anyhow::Result<()>;
@@ -120,6 +121,7 @@ impl Worker for KvConnectorWorker {
         dtype_width_bytes: usize,
         kv_cache_tensor: Arc<VllmTensor>,
         raw_event_handles: Vec<u64>,
+        module_id: Option<String>,
     ) -> anyhow::Result<()> {
         if self.kvbm_worker.get().is_some() {
             tracing::warn!("kvbm worker already registered");
@@ -138,7 +140,7 @@ impl Worker for KvConnectorWorker {
             .device_layout_type(LayoutType::FullyContiguous)
             .host_layout_type(LayoutType::FullyContiguous)
             .disk_layout_type(LayoutType::FullyContiguous)
-            .barrier_id_prefix(get_barrier_id_prefix())
+            .barrier_id_prefix(get_barrier_id_prefix(module_id))
             .scheduler_client(Some(self.transfer_client.clone()))
             .build()?;
 
@@ -400,6 +402,7 @@ impl PyTrtllmKvConnectorWorker {
         Ok(Self { connector_worker })
     }
 
+    #[pyo3(signature = (num_device_blocks, page_size, device_id, dtype_width_bytes, kv_cache_tensor, raw_event_handles, module_id=None))]
     pub fn register_kv_caches(
         &mut self,
         num_device_blocks: usize,
@@ -408,6 +411,7 @@ impl PyTrtllmKvConnectorWorker {
         dtype_width_bytes: usize,
         kv_cache_tensor: Py<PyAny>,
         raw_event_handles: Vec<u64>,
+        module_id: Option<String>,
     ) -> PyResult<()> {
         // Convert Python tensor to Rust VllmTensor objects
         let rust_kv_cache_tensor = Arc::new(VllmTensor::new(kv_cache_tensor).map_err(to_pyerr)?);
@@ -420,6 +424,7 @@ impl PyTrtllmKvConnectorWorker {
                 dtype_width_bytes,
                 rust_kv_cache_tensor,
                 raw_event_handles,
+                module_id,
             )
             .map_err(to_pyerr)
     }

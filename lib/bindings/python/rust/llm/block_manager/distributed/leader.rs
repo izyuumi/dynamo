@@ -70,9 +70,9 @@ impl KvbmLeader {
 #[pymethods]
 impl KvbmLeader {
     #[new]
-    #[pyo3(signature = (world_size, drt))]
-    fn new(world_size: usize, drt: DistributedRuntime) -> PyResult<Self> {
-        let barrier_id_prefix = get_barrier_id_prefix();
+    #[pyo3(signature = (world_size, drt, module_id=None))]
+    fn new(world_size: usize, drt: DistributedRuntime, module_id: Option<String>) -> PyResult<Self> {
+        let barrier_id_prefix = get_barrier_id_prefix(module_id);
         let leader_init_timeout_sec: u64 =
             get_leader_init_timeout_secs(LEADER_WORKER_INIT_TIMEOUT_SECS);
 
