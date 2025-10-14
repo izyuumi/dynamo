@@ -1105,8 +1105,9 @@ impl KvPushRouter {
                 .await
                 .map_err(to_pyerr)?;
 
-            // Return a tuple of (worker_id, overlap_blocks)
-            // Extract worker_id from WorkerWithDpRank for Python API
+            // TODO: We do not return dp_rank for now to not break API expectations.
+            // Need to work on this shortly - should return (worker_id, dp_rank, overlap_blocks)
+            // or a dict to maintain backward compatibility while adding dp_rank.
             Ok((best_worker.worker_id, overlap_blocks))
         })
     }

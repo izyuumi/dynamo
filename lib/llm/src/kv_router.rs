@@ -526,15 +526,33 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
                 // Check if this is a query_instance_id request first
                 let query_instance_id = request.has_annotation("query_instance_id");
 
-                let (instance_id, overlap_amount) = if let Some(id) = request.backend_instance_id {
-                    // If instance_id is set, use it and manually add the request to track it
-                    if !query_instance_id {
-                        let worker = WorkerWithDpRank::new(id, request.dp_rank.unwrap_or(0));
-                        self.chooser
-                            .add_request(context_id.clone(), &request.token_ids, 0, worker)
-                            .await;
+                let (instance_id, dp_rank, overlap_amount) = if let Some(id) =
+                    request.backend_instance_id
+                {
+                    // If instance_id is set, use it and compute actual overlap
+                    let dp_rank = request.dp_rank.unwrap_or(0);
+                    if query_instance_id {
+                        tracing::debug!(
+                            "backend_instance_id is set, routing to instance {id} with dp_rank {dp_rank} and ignoring query_instance_id annotation"
+                        );
                     }
-                    (id, 0)
+
+                    // Compute actual overlap blocks by querying the indexer
+                    let block_hashes =
+                        compute_block_hash_for_seq(&request.token_ids, self.chooser.block_size());
+                    let overlap_scores = self.chooser.indexer.find_matches(block_hashes).await?;
+                    let worker = WorkerWithDpRank::new(id, dp_rank);
+                    let overlap_blocks = overlap_scores.scores.get(&worker).copied().unwrap_or(0);
+
+                    self.chooser
+                        .add_request(
+                            context_id.clone(),
+                            &request.token_ids,
+                            overlap_blocks,
+                            worker,
+                        )
+                        .await;
+                    (id, dp_rank, overlap_blocks)
                 } else {
                     // Otherwise, find the best match
                     let (best_worker, overlap_amount) = self
@@ -546,7 +564,7 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
                             !query_instance_id, // Don't update states if query_instance_id
                         )
                         .await?;
-                    (best_worker.worker_id, overlap_amount)
+                    (best_worker.worker_id, best_worker.dp_rank, overlap_amount)
                 };
 
                 // if request has the annotation "query_instance_id",
@@ -570,6 +588,7 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
                 }
                 let (mut backend_input, context) = request.into_parts();
                 backend_input.estimated_prefix_hit_num_blocks = Some(overlap_amount);
+                backend_input.dp_rank = Some(dp_rank);
                 let updated_request = context.map(|_| backend_input);
 
                 let mut response_stream = self.inner.direct(updated_request, instance_id).await?;
