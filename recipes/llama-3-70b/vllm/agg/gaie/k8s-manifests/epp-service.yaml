@@ -13,21 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-eppAware:
-  enabled: true
-  eppImage: nvcr.io/nvstaging/ai-dynamo/gaie-epp-dynamo:v0.6.0-1
-  dynamoNamespace: llama3-70b-agg
-  dynamoComponent: backend
-  # This must match your cli parameter in --block-size 128 in your VLLM deploy file deploy.yaml.
-  dynamoKvBlockSize: '{{ env "DYNAMO_KV_BLOCK_SIZE" | default "128" }}'
+# NOTE: Update the namespace field below to match your deployment namespace
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama3-70b-agg-epp
+spec:
+  selector:
+    app: llama3-70b-agg
+  ports:
+    - protocol: TCP
+      port: 9002
+      targetPort: 9002
+      appProtocol: http2
+  type: ClusterIP
 
-imagePullSecrets:
-  - docker-imagepullsecret
-
-platformReleaseName: dynamo-platform
-platformNamespace: "dynamo"
-
-epp:
-  extraEnv:
-    - name: USE_STREAMING
-      value: "true"
