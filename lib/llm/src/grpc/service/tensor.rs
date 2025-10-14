@@ -497,19 +497,40 @@ impl TryFrom<ExtendedNvCreateTensorResponse> for inference::ModelInferResponse {
 }
 
 impl inference::ModelInferResponse {
-    pub fn add_raw_output_contents(&mut self, tensor: &tensor::Tensor) -> Result<(), anyhow::Error> {
+    pub fn add_raw_output_contents(
+        &mut self,
+        tensor: &tensor::Tensor,
+    ) -> Result<(), anyhow::Error> {
         let raw_content = match &tensor.data {
-            tensor::FlattenTensor::Bool(data) => data.iter().map(|&b| if b { 1u8 } else { 0u8 }).collect(),
+            tensor::FlattenTensor::Bool(data) => {
+                data.iter().map(|&b| if b { 1u8 } else { 0u8 }).collect()
+            }
             tensor::FlattenTensor::Uint8(data) => data.clone(),
-            tensor::FlattenTensor::Uint16(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            tensor::FlattenTensor::Uint32(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            tensor::FlattenTensor::Uint64(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
+            tensor::FlattenTensor::Uint16(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
+            tensor::FlattenTensor::Uint32(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
+            tensor::FlattenTensor::Uint64(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
             tensor::FlattenTensor::Int8(data) => data.iter().map(|&x| x as u8).collect(),
-            tensor::FlattenTensor::Int16(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            tensor::FlattenTensor::Int32(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            tensor::FlattenTensor::Int64(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            tensor::FlattenTensor::Float32(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
-            tensor::FlattenTensor::Float64(data) => data.iter().flat_map(|&x| x.to_le_bytes()).collect(),
+            tensor::FlattenTensor::Int16(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
+            tensor::FlattenTensor::Int32(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
+            tensor::FlattenTensor::Int64(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
+            tensor::FlattenTensor::Float32(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
+            tensor::FlattenTensor::Float64(data) => {
+                data.iter().flat_map(|&x| x.to_le_bytes()).collect()
+            }
             tensor::FlattenTensor::Bytes(data) => {
                 let mut bytes = Vec::new();
                 for item in data {
@@ -533,79 +554,59 @@ impl inference::ModelInferResponse {
                 bool_contents: data.clone(),
                 ..Default::default()
             }),
-            tensor::FlattenTensor::Uint8(data) => {
-                Some(inference::InferTensorContents {
-                    uint_contents: data.iter().map(|&x| x as u32).collect(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Uint8(data) => Some(inference::InferTensorContents {
+                uint_contents: data.iter().map(|&x| x as u32).collect(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Uint16(data) => {
-                Some(inference::InferTensorContents {
-                    uint_contents: data.iter().map(|&x| x as u32).collect(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Uint16(data) => Some(inference::InferTensorContents {
+                uint_contents: data.iter().map(|&x| x as u32).collect(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Uint32(data) => {
-                Some(inference::InferTensorContents {
-                    uint_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Uint32(data) => Some(inference::InferTensorContents {
+                uint_contents: data.clone(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Uint64(data) => {
-                Some(inference::InferTensorContents {
-                    uint64_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Uint64(data) => Some(inference::InferTensorContents {
+                uint64_contents: data.clone(),
+                ..Default::default()
+            }),
 
             tensor::FlattenTensor::Int8(data) => Some(inference::InferTensorContents {
                 int_contents: data.iter().map(|&x| x as i32).collect(),
                 ..Default::default()
             }),
-            tensor::FlattenTensor::Int16(data) => {
-                Some(inference::InferTensorContents {
-                    int_contents: data.iter().map(|&x| x as i32).collect(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Int16(data) => Some(inference::InferTensorContents {
+                int_contents: data.iter().map(|&x| x as i32).collect(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Int32(data) => {
-                Some(inference::InferTensorContents {
-                    int_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Int32(data) => Some(inference::InferTensorContents {
+                int_contents: data.clone(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Int64(data) => {
-                Some(inference::InferTensorContents {
-                    int64_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Int64(data) => Some(inference::InferTensorContents {
+                int64_contents: data.clone(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Float32(data) => {
-                Some(inference::InferTensorContents {
-                    fp32_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Float32(data) => Some(inference::InferTensorContents {
+                fp32_contents: data.clone(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Float64(data) => {
-                Some(inference::InferTensorContents {
-                    fp64_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Float64(data) => Some(inference::InferTensorContents {
+                fp64_contents: data.clone(),
+                ..Default::default()
+            }),
 
-            tensor::FlattenTensor::Bytes(data) => {
-                Some(inference::InferTensorContents {
-                    bytes_contents: data.clone(),
-                    ..Default::default()
-                })
-            }
+            tensor::FlattenTensor::Bytes(data) => Some(inference::InferTensorContents {
+                bytes_contents: data.clone(),
+                ..Default::default()
+            }),
         };
     }
 }

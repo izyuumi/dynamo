@@ -22,7 +22,7 @@ use tokio_stream::{Stream, StreamExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::grpc::service::openai::completion_response_stream;
-use crate::grpc::service::tensor::{tensor_response_stream, ExtendedNvCreateTensorResponse};
+use crate::grpc::service::tensor::{ExtendedNvCreateTensorResponse, tensor_response_stream};
 use std::convert::{TryFrom, TryInto};
 use tonic::{Request, Response, Status, transport::Server};
 
@@ -201,13 +201,13 @@ impl GrpcInferenceService for KserveService {
 
             let stream = tensor_response_stream(self.state_clone(), tensor_request, false).await?;
 
-            let tensor_response =
-            ExtendedNvCreateTensorResponse {response: NvCreateTensorResponse::from_annotated_stream(stream)
-                .await
-                .map_err(|e| {
-                    tracing::error!("Failed to fold completions stream: {:?}", e);
-                    Status::internal(format!("Failed to fold completions stream: {}", e))
-                })?,
+            let tensor_response = ExtendedNvCreateTensorResponse {
+                response: NvCreateTensorResponse::from_annotated_stream(stream)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!("Failed to fold completions stream: {:?}", e);
+                        Status::internal(format!("Failed to fold completions stream: {}", e))
+                    })?,
                 to_raw_output_contents,
             };
 

@@ -1194,9 +1194,13 @@ pub mod kserve_test {
         });
 
         let response = client.model_infer(request).await.unwrap();
-        validate_tensor_response(response, model_name, inputs, std::collections::HashMap::new());
-
-        }
+        validate_tensor_response(
+            response,
+            model_name,
+            inputs,
+            std::collections::HashMap::new(),
+        );
+    }
 
     #[rstest]
     #[tokio::test]
@@ -1352,7 +1356,12 @@ pub mod kserve_test {
         });
 
         let response = client.model_infer(request).await.unwrap();
-        validate_tensor_response(response, model_name, inputs, std::collections::HashMap::new());
+        validate_tensor_response(
+            response,
+            model_name,
+            inputs,
+            std::collections::HashMap::new(),
+        );
 
         // streaming response in model_infer(), expect failure
         let repeat = inference::model_infer_request::InferInputTensor {
