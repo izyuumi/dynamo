@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           cd deploy/cloud/operator
-          docker build -f Dockerfile -t dynamo-operator:latest .
+          docker buildx build --platform linux/${{ matrix.platform.arch }} -f Dockerfile -t dynamo-operator:latest .
       - name: Docker Tag and Push
         uses: ./.github/actions/docker-tag-push
         with:
