@@ -937,6 +937,9 @@ echo "Saved profiling output to ConfigMap %s"
 						RestartPolicy:      corev1.RestartPolicyNever,
 						Containers:         []corev1.Container{profilerContainer, sidecarContainer},
 						Volumes:            volumes,
+						ImagePullSecrets: []corev1.LocalObjectReference{
+							{Name: "nvcr-imagepullsecret"},
+						},
 					},
 				},
 			},

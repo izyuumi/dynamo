@@ -35,11 +35,25 @@ metadata:
     {{- include "dynamo-operator.labels" . | nindent 4 }}
     app.kubernetes.io/component: dgdr-profiling
 rules:
+# ConfigMaps - needed for saving profiling results
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["create", "get", "update", "patch", "delete"]
+# DynamoGraphDeploymentRequests - needed to get DGDR info
 - apiGroups: ["nvidia.com"]
   resources: ["dynamographdeploymentrequests"]
+  verbs: ["get"]
+# DynamoGraphDeployments - needed for online profiling to create test deployments
+# The operator will handle creating the actual pods, services, and deployments
+- apiGroups: ["nvidia.com"]
+  resources: ["dynamographdeployments"]
+  verbs: ["get", "create", "delete", "list", "watch"]
+# Pods - needed for listing pods by label selector and getting logs from test deployments
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list", "get"]
+- apiGroups: [""]
+  resources: ["pods/log"]
   verbs: ["get"]
 
 ---
@@ -70,11 +84,25 @@ metadata:
     {{- include "dynamo-operator.labels" . | nindent 4 }}
     app.kubernetes.io/component: dgdr-profiling
 rules:
+# ConfigMaps - needed for saving profiling results
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["create", "get", "update", "patch", "delete"]
+# DynamoGraphDeploymentRequests - needed to get DGDR info
 - apiGroups: ["nvidia.com"]
   resources: ["dynamographdeploymentrequests"]
+  verbs: ["get"]
+# DynamoGraphDeployments - needed for online profiling to create test deployments
+# The operator will handle creating the actual pods, services, and deployments
+- apiGroups: ["nvidia.com"]
+  resources: ["dynamographdeployments"]
+  verbs: ["get", "create", "delete", "list", "watch"]
+# Pods - needed for listing pods by label selector and getting logs from test deployments
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list", "get"]
+- apiGroups: [""]
+  resources: ["pods/log"]
   verbs: ["get"]
 {{- end }}
 # (Remove the trailing blank line at end of file)
