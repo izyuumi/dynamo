@@ -26,30 +26,54 @@ fn load_test_data(file_path: &str) -> TestData {
     // Parse the file as JSON
     let parsed_json: serde_json::Value = serde_json::from_str(&data).unwrap();
 
-    // Extract expected values
-    let expected_normal_content = parsed_json
-        .get("normal_content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // Extract expected values (supports both new and legacy formats)
+    let (expected_normal_content, expected_reasoning_content, expected_tool_calls) =
+        if let Some(expected) = parsed_json.get("expected_output") {
+            let nc = expected
+                .get("normal_content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let rc = expected
+                .get("reasoning_content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let tc = expected
+                .get("tool_calls")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            (nc, rc, tc)
+        } else {
+            let nc = parsed_json
+                .get("normal_content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let rc = parsed_json
+                .get("reasoning_content")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let tc = parsed_json
+                .get("tool_calls")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default();
+            (nc, rc, tc)
+        };
 
-    let expected_reasoning_content = parsed_json
-        .get("reasoning_content")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    let expected_tool_calls = parsed_json
-        .get("tool_calls")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    // Extract the data chunks with choices
-    let data_chunks = parsed_json
-        .get("data")
-        .and_then(|v| v.as_array())
-        .expect("No 'data' array found in JSON");
+    // Extract the data chunks with choices (supports both new `input_stream` and legacy `data`)
+    let data_chunks = if let Some(arr) = parsed_json.get("input_stream").and_then(|v| v.as_array())
+    {
+        arr
+    } else {
+        parsed_json
+            .get("data")
+            .and_then(|v| v.as_array())
+            .expect("No 'input_stream' or 'data' array found in JSON")
+    };
 
     let stream_chunks = data_chunks
         .iter()
@@ -425,6 +449,225 @@ mod tests {
         );
 
         // Verify tool calls
+        assert_tool_calls(&aggregated.tool_calls, &test_data.expected_tool_calls);
+    }
+
+    #[tokio::test]
+    async fn test_gpt_oss_e2e_with_no_tool_calls_sglang() {
+        // SGLang Parsing test for GPT-OSS without tool calls.
+
+        let file_path = format!(
+            "{}/sglang/gpt-oss-20b/chat_completion_stream_675195a8-no-tool.json",
+            DATA_ROOT_PATH
+        );
+        let test_data = load_test_data(&file_path);
+
+        // Create a stream from the mock chunks
+        let input_stream = stream::iter(test_data.stream_chunks);
+
+        // Parse the response stream with reasoning and tool parsing enabled
+        let output_chunks = parse_response_stream(
+            input_stream,
+            true,
+            true,
+            Some("harmony".to_string()),
+            Some("gpt_oss".to_string()),
+        )
+        .await;
+
+        // Verify we got output chunks
+        assert!(!output_chunks.is_empty(), "Should have output chunks");
+
+        // Aggregate content from all chunks
+        let aggregated = aggregate_content_from_chunks(&output_chunks);
+
+        // Expect content and reasoning present, no tool calls
+        assert!(
+            !aggregated.normal_content.is_empty(),
+            "Should have normal content for no-tool case"
+        );
+        assert!(
+            !aggregated.reasoning_content.is_empty(),
+            "Should have reasoning content parsed from analysis channel"
+        );
+        assert!(
+            !aggregated.has_tool_calls,
+            "Should not have tool calls in no-tool case"
+        );
+
+        assert_eq!(
+            aggregated.reasoning_content, test_data.expected_reasoning_content,
+            "Reasoning content should match expected value.",
+        );
+
+        assert_eq!(
+            aggregated.normal_content, test_data.expected_normal_content,
+            "Normal content should match expected value.",
+        );
+
+        assert_tool_calls(&aggregated.tool_calls, &test_data.expected_tool_calls);
+    }
+
+    #[tokio::test]
+    async fn test_gpt_oss_e2e_with_tool_calls_sglang() {
+        // SGLang Parsing test for GPT-OSS with tool calls.
+
+        let file_path = format!(
+            "{}/sglang/gpt-oss-20b/chat_completion_stream_19c97899-tool.json",
+            DATA_ROOT_PATH
+        );
+        let test_data = load_test_data(&file_path);
+
+        // Create a stream from the mock chunks
+        let input_stream = stream::iter(test_data.stream_chunks);
+
+        // Parse the response stream with reasoning and tool parsing enabled
+        let output_chunks = parse_response_stream(
+            input_stream,
+            true,
+            true,
+            Some("harmony".to_string()),
+            Some("gpt_oss".to_string()),
+        )
+        .await;
+
+        // Verify we got output chunks
+        assert!(!output_chunks.is_empty(), "Should have output chunks");
+
+        // Aggregate content from all chunks
+        let aggregated = aggregate_content_from_chunks(&output_chunks);
+
+        // Expect reasoning parsed, no normal content, and tool calls present
+        assert!(
+            !aggregated.reasoning_content.is_empty(),
+            "Should have extracted reasoning content from analysis channel. Got: '{}'",
+            aggregated.reasoning_content
+        );
+
+        assert_eq!(
+            aggregated.normal_content, test_data.expected_normal_content,
+            "Normal content should match expected value.",
+        );
+
+        assert_eq!(
+            aggregated.reasoning_content, test_data.expected_reasoning_content,
+            "Reasoning content should match expected value.",
+        );
+
+        // Verify tool calls presence and values
+        let expected_has_tool_calls = !test_data.expected_tool_calls.is_empty();
+        assert_eq!(
+            aggregated.has_tool_calls, expected_has_tool_calls,
+            "Tool calls presence should match expected value"
+        );
+
+        assert_tool_calls(&aggregated.tool_calls, &test_data.expected_tool_calls);
+    }
+
+    #[tokio::test]
+    async fn test_qwen_e2e_with_no_tools_sglang() {
+        // SGLang Parsing test for Qwen with no tools.
+
+        let file_path = format!(
+            "{}/sglang/qwen3-0.6B/chat_completion_stream_f121d1ca-no-tool.json",
+            DATA_ROOT_PATH
+        );
+        let test_data = load_test_data(&file_path);
+
+        // Create a stream from the mock chunks
+        let input_stream = stream::iter(test_data.stream_chunks);
+
+        // Parse the response stream with reasoning and tool parsing enabled
+        let output_chunks = parse_response_stream(
+            input_stream,
+            true,
+            true,
+            Some("hermes".to_string()),
+            Some("qwen".to_string()),
+        )
+        .await;
+
+        // Verify we got output chunks
+        assert!(!output_chunks.is_empty(), "Should have output chunks");
+
+        // Aggregate content from output chunks
+        let aggregated = aggregate_content_from_chunks(&output_chunks);
+
+        // Expect both reasoning and normal content (final answer) present, and no tool calls
+        assert!(
+            !aggregated.reasoning_content.is_empty(),
+            "Should have extracted reasoning content."
+        );
+        assert!(
+            !aggregated.normal_content.is_empty(),
+            "Should have final normal content."
+        );
+        assert!(!aggregated.has_tool_calls, "Tool calls should be absent");
+
+        assert_eq!(
+            aggregated.reasoning_content, test_data.expected_reasoning_content,
+            "Reasoning content should match expected value.",
+        );
+
+        assert_eq!(
+            aggregated.normal_content, test_data.expected_normal_content,
+            "Normal content should match expected value.",
+        );
+
+        assert_tool_calls(&aggregated.tool_calls, &test_data.expected_tool_calls);
+    }
+
+    #[tokio::test]
+    async fn test_qwen_e2e_with_tools_sglang() {
+        // SGLang Parsing test for Qwen with tools.
+
+        let file_path = format!(
+            "{}/sglang/qwen3-0.6B/chat_completion_stream_c42ba578-tool.json",
+            DATA_ROOT_PATH
+        );
+        let test_data = load_test_data(&file_path);
+
+        // Create a stream from the mock chunks
+        let input_stream = stream::iter(test_data.stream_chunks);
+
+        // Parse the response stream with reasoning and tool parsing enabled
+        let output_chunks = parse_response_stream(
+            input_stream,
+            true,
+            true,
+            Some("hermes".to_string()),
+            Some("qwen".to_string()),
+        )
+        .await;
+
+        // Verify we got output chunks
+        assert!(!output_chunks.is_empty(), "Should have output chunks");
+
+        // Aggregate content from output chunks
+        let aggregated = aggregate_content_from_chunks(&output_chunks);
+
+        // Expect reasoning parsed, no normal content, and tool calls present
+        assert!(
+            !aggregated.reasoning_content.is_empty(),
+            "Should have extracted reasoning content."
+        );
+
+        assert_eq!(
+            aggregated.reasoning_content, test_data.expected_reasoning_content,
+            "Reasoning content should match expected value.",
+        );
+
+        assert_eq!(
+            aggregated.normal_content, test_data.expected_normal_content,
+            "Normal content should match expected value.",
+        );
+
+        // Verify tool calls presence and values
+        let expected_has_tool_calls = !test_data.expected_tool_calls.is_empty();
+        assert_eq!(
+            aggregated.has_tool_calls, expected_has_tool_calls,
+            "Tool calls presence should match expected value"
+        );
         assert_tool_calls(&aggregated.tool_calls, &test_data.expected_tool_calls);
     }
 

@@ -400,8 +400,14 @@ async fn test_deepseek_v3_1_tool_call_parsing() {
 
     // Debug: Print the content
     println!("Response content: {}", response_content);
-    println!("Contains tool_calls_begin: {}", response_content.contains("<｜tool▁calls▁begin｜>"));
-    println!("Contains tool_call_begin: {}", response_content.contains("<｜tool▁call▁begin｜>"));
+    println!(
+        "Contains tool_calls_begin: {}",
+        response_content.contains("<｜tool▁calls▁begin｜>")
+    );
+    println!(
+        "Contains tool_call_begin: {}",
+        response_content.contains("<｜tool▁call▁begin｜>")
+    );
 
     // Parse the tool calls using the deepseek_v3_1 parser
     let (tool_calls, remaining_content) =
@@ -415,11 +421,7 @@ async fn test_deepseek_v3_1_tool_call_parsing() {
     }
 
     // Validate we got exactly 1 tool call
-    assert_eq!(
-        tool_calls.len(),
-        1,
-        "Should parse exactly 1 tool call"
-    );
+    assert_eq!(tool_calls.len(), 1, "Should parse exactly 1 tool call");
 
     // Validate remaining content (should be the explanatory text before the tool call)
     assert!(remaining_content.is_some());
@@ -442,7 +444,11 @@ async fn test_deepseek_v3_1_tool_call_parsing() {
 
     // Check that todos array exists and has 5 items
     assert!(args_obj.contains_key("todos"), "Should have 'todos' key");
-    let todos = args_obj.get("todos").unwrap().as_array().expect("todos should be an array");
+    let todos = args_obj
+        .get("todos")
+        .unwrap()
+        .as_array()
+        .expect("todos should be an array");
     assert_eq!(todos.len(), 5, "Should have exactly 5 todo items");
 
     // Validate first todo item

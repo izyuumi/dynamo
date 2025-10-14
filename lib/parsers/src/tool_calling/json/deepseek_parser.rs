@@ -273,8 +273,14 @@ mod tests {
         };
 
         println!("Testing text: {}", text);
-        println!("Contains tool_calls_begin: {}", text.contains("<｜tool▁calls▁begin｜>"));
-        println!("Contains tool_call_begin: {}", text.contains("<｜tool▁call▁begin｜>"));
+        println!(
+            "Contains tool_calls_begin: {}",
+            text.contains("<｜tool▁calls▁begin｜>")
+        );
+        println!(
+            "Contains tool_call_begin: {}",
+            text.contains("<｜tool▁call▁begin｜>")
+        );
         println!("Contains tool_sep: {}", text.contains("<｜tool▁sep｜>"));
 
         let (result, content) = parse_tool_calls_deepseek_v3_1(text, &config).unwrap();
