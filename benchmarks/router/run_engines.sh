@@ -7,6 +7,7 @@
 NUM_WORKERS=8
 MODEL_PATH="deepseek-ai/DeepSeek-R1-Distill-Llama-8B"
 TENSOR_PARALLEL_SIZE=1
+DATA_PARALLEL_SIZE=1
 USE_MOCKERS=false
 USE_TRTLLM=false
 MODE="agg"  # Options: agg (default), decode, prefill
@@ -26,6 +27,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --tensor-parallel-size)
             TENSOR_PARALLEL_SIZE="$2"
+            shift 2
+            ;;
+        --data-parallel-size)
+            DATA_PARALLEL_SIZE="$2"
             shift 2
             ;;
         --mockers)
@@ -114,13 +119,19 @@ if ! [[ "$TENSOR_PARALLEL_SIZE" =~ ^[0-9]+$ ]] || [ "$TENSOR_PARALLEL_SIZE" -lt 
     exit 1
 fi
 
+if ! [[ "$DATA_PARALLEL_SIZE" =~ ^[0-9]+$ ]] || [ "$DATA_PARALLEL_SIZE" -lt 1 ]; then
+    echo "Error: DATA_PARALLEL_SIZE must be a positive integer"
+    exit 1
+fi
+
 if ! [[ "$BASE_GPU_OFFSET" =~ ^[0-9]+$ ]]; then
     echo "Error: BASE_GPU_OFFSET must be a non-negative integer"
     exit 1
 fi
 
-# Calculate total GPUs needed
-TOTAL_GPUS_NEEDED=$((NUM_WORKERS * TENSOR_PARALLEL_SIZE))
+# Calculate total GPUs needed (TP * DP per worker)
+GPUS_PER_WORKER=$((TENSOR_PARALLEL_SIZE * DATA_PARALLEL_SIZE))
+TOTAL_GPUS_NEEDED=$((NUM_WORKERS * GPUS_PER_WORKER))
 LAST_GPU=$((BASE_GPU_OFFSET + TOTAL_GPUS_NEEDED - 1))
 echo "Configuration:"
 if [ "$USE_MOCKERS" = true ]; then
@@ -135,6 +146,8 @@ echo "  Mode: $MODE"
 echo "  Workers: $NUM_WORKERS"
 echo "  Model: $MODEL_PATH"
 echo "  Tensor Parallel Size: $TENSOR_PARALLEL_SIZE"
+echo "  Data Parallel Size: $DATA_PARALLEL_SIZE"
+echo "  GPUs per worker: $GPUS_PER_WORKER"
 echo "  Total GPUs needed: $TOTAL_GPUS_NEEDED"
 echo "  GPU Range: $BASE_GPU_OFFSET-$LAST_GPU"
 echo "  Engine args: ${EXTRA_ARGS[*]}"
@@ -158,11 +171,12 @@ for i in $(seq 1 $NUM_WORKERS); do
         echo "[${MODE^} Worker-$i] Starting..."
 
         # Calculate GPU indices for this worker (with base offset)
-        START_GPU=$(( BASE_GPU_OFFSET + (i - 1) * TENSOR_PARALLEL_SIZE ))
-        END_GPU=$(( START_GPU + TENSOR_PARALLEL_SIZE - 1 ))
+        # Each worker needs TP * DP GPUs
+        START_GPU=$(( BASE_GPU_OFFSET + (i - 1) * GPUS_PER_WORKER ))
+        END_GPU=$(( START_GPU + GPUS_PER_WORKER - 1 ))
 
-        # Build CUDA_VISIBLE_DEVICES string
-        if [ "$TENSOR_PARALLEL_SIZE" -eq 1 ]; then
+        # Build CUDA_VISIBLE_DEVICES string for all GPUs (TP * DP)
+        if [ "$GPUS_PER_WORKER" -eq 1 ]; then
             GPU_DEVICES="$START_GPU"
         else
             GPU_DEVICES=""
@@ -200,6 +214,9 @@ for i in $(seq 1 $NUM_WORKERS); do
             VLLM_ARGS=()
             VLLM_ARGS+=("--model" "$MODEL_PATH")
             VLLM_ARGS+=("--tensor-parallel-size" "$TENSOR_PARALLEL_SIZE")
+            if [ "$DATA_PARALLEL_SIZE" -gt 1 ]; then
+                VLLM_ARGS+=("--data-parallel-size" "$DATA_PARALLEL_SIZE")
+            fi
             if [ "$MODE" = "prefill" ]; then
                 VLLM_ARGS+=("--is-prefill-worker")
             fi
