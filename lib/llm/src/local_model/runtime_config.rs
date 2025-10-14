@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use crate::protocols::tensor;
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ModelRuntimeConfig {
     pub total_kv_blocks: Option<u64>,
 
@@ -38,8 +38,23 @@ pub struct ModelRuntimeConfig {
     pub tensor_model_config: Option<tensor::TensorModelConfig>,
 }
 
-fn default_data_parallel_size() -> u32 {
+const fn default_data_parallel_size() -> u32 {
     1
+}
+
+impl Default for ModelRuntimeConfig {
+    fn default() -> Self {
+        Self {
+            total_kv_blocks: None,
+            max_num_seqs: None,
+            max_num_batched_tokens: None,
+            tool_call_parser: None,
+            reasoning_parser: None,
+            data_parallel_size: default_data_parallel_size(),
+            runtime_data: HashMap::new(),
+            tensor_model_config: None,
+        }
+    }
 }
 
 impl ModelRuntimeConfig {
