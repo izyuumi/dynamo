@@ -168,7 +168,8 @@ echo "Starting $NUM_WORKERS $MODE workers..."
 
 for i in $(seq 1 $NUM_WORKERS); do
     {
-        echo "[${MODE^} Worker-$i] Starting..."
+        MODE_CAPITALIZED=$(echo "$MODE" | sed 's/\(.\)/\U\1/')
+        echo "[$MODE_CAPITALIZED Worker-$i] Starting..."
 
         # Calculate GPU indices for this worker (with base offset)
         # Each worker needs TP * DP GPUs
@@ -196,7 +197,7 @@ for i in $(seq 1 $NUM_WORKERS); do
                 --endpoint dyn://test.mocker.generate \
                 "${EXTRA_ARGS[@]}"
         elif [ "$USE_TRTLLM" = true ]; then
-            echo "[${MODE^} Worker-$i] Using GPUs: $GPU_DEVICES"
+            echo "[$MODE_CAPITALIZED Worker-$i] Using GPUs: $GPU_DEVICES"
             # Run TensorRT-LLM engine with trtllm-llmapi-launch for proper initialization
             TRTLLM_ARGS=()
             TRTLLM_ARGS+=("--model-path" "$MODEL_PATH")
@@ -209,7 +210,7 @@ for i in $(seq 1 $NUM_WORKERS); do
             exec env CUDA_VISIBLE_DEVICES=$GPU_DEVICES trtllm-llmapi-launch python -m dynamo.trtllm \
                 "${TRTLLM_ARGS[@]}"
         else
-            echo "[${MODE^} Worker-$i] Using GPUs: $GPU_DEVICES"
+            echo "[$MODE_CAPITALIZED Worker-$i] Using GPUs: $GPU_DEVICES"
             # Run vLLM engine with PYTHONHASHSEED=0 for deterministic event IDs in KV-aware routing
             VLLM_ARGS=()
             VLLM_ARGS+=("--model" "$MODEL_PATH")
