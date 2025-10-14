@@ -105,7 +105,7 @@ kubectl create secret docker-registry docker-imagepullsecret \
   --namespace=$NAMESPACE
 ```
 
-Do not forget to include the the HuggingFace token if required.
+Do not forget to include the HuggingFace token if required.
 
 ```bash
 export HF_TOKEN=your_hf_token
@@ -114,7 +114,7 @@ kubectl create secret generic hf-token-secret \
   -n ${NAMESPACE}
 ```
 
-Create a model configuration file similar to the vllm_agg_qwen.yaml for you model.
+Create a model configuration file similar to the vllm_agg_qwen.yaml for your model.
 This file demonstrates the values needed for the Vllm Agg setup in [agg.yaml](../../components/backends/vllm/deploy/agg.yaml)
 Take a note of the model's block size provided in the model card.
 
@@ -134,7 +134,8 @@ export EPP_IMAGE=<the-epp-image-you-built>
 ```
 
 ```bash
-helm install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml --set-string extension.image=$EPP_IMAGE
+helm upgrade --install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml --set-string extension.image=$EPP_IMAGE
+# do not include --set-string extension.image=$EPP_IMAGE to use the default images
 ```
 
 Key configurations include:
@@ -218,7 +219,10 @@ You can also use the standard EPP image`us-central1-docker.pkg.dev/k8s-staging-i
 
 ```bash
 cd deploy/inference-gateway
-helm install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml -f ./values-blackbox-epp.yaml
+# Optionally export the standard EPP image if you do not want to use the default we suggest.
+export EPP_IMAGE=us-central1-docker.pkg.dev/k8s-artifacts-prod/images/gateway-api-inference-extension/epp:v0.4.0
+helm upgrade --install dynamo-gaie ./helm/dynamo-gaie -n my-model -f ./vllm_agg_qwen.yaml --set epp.useDynamo=false
+# Optionally overwrite the image --set-string extension.image=$EPP_IMAGE
 ```
 
 ### 5. Verify Installation ###

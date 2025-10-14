@@ -50,7 +50,9 @@ httpRoute:
 
 extension:
   # EPP image for the GAIE extension (Dynamo EPP image by default)
-  image: nvcr.io/nvstaging/ai-dynamo/gaie-epp-dynamo:v0.6.0-1
+  image: "" # leave empty to use defaults below
+  standardImage: us-central1-docker.pkg.dev/k8s-artifacts-prod/images/gateway-api-inference-extension/epp:v0.4.0
+  dynamoImage: nvcr.io/nvstaging/ai-dynamo/gaie-epp-dynamo:v0.6.0-1
 
 # generic knobs you may want in both modes
 imagePullSecrets:
@@ -72,7 +74,7 @@ epp:
   # Dynamo-specific settings (only used when useDynamo: true)
   configFile: "/etc/epp/epp-config-dynamo.yaml"
   dynamo:
-    namespace: "vllm-agg"      # Required when useDynamo: true
+    namespace: "vllm-agg" # Required when useDynamo: true.
     component: "backend"
     kvBlockSize: "16"
 
