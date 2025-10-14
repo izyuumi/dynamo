@@ -27,53 +27,33 @@ fn load_test_data(file_path: &str) -> TestData {
     let parsed_json: serde_json::Value = serde_json::from_str(&data).unwrap();
 
     // Extract expected values (supports both new and legacy formats)
-    let (expected_normal_content, expected_reasoning_content, expected_tool_calls) =
-        if let Some(expected) = parsed_json.get("expected_output") {
-            let nc = expected
-                .get("normal_content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let rc = expected
-                .get("reasoning_content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let tc = expected
-                .get("tool_calls")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            (nc, rc, tc)
-        } else {
-            let nc = parsed_json
-                .get("normal_content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let rc = parsed_json
-                .get("reasoning_content")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let tc = parsed_json
-                .get("tool_calls")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default();
-            (nc, rc, tc)
-        };
+    let expected = parsed_json
+        .get("expected_output")
+        .expect("No 'expected_output' object found in JSON");
 
-    // Extract the data chunks with choices (supports both new `input_stream` and legacy `data`)
-    let data_chunks = if let Some(arr) = parsed_json.get("input_stream").and_then(|v| v.as_array())
-    {
-        arr
-    } else {
-        parsed_json
-            .get("data")
-            .and_then(|v| v.as_array())
-            .expect("No 'input_stream' or 'data' array found in JSON")
-    };
+    let expected_normal_content = expected
+        .get("normal_content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let expected_reasoning_content = expected
+        .get("reasoning_content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let expected_tool_calls = expected
+        .get("tool_calls")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    // Extract the data chunks with choices from new `input_stream`
+    let data_chunks = parsed_json
+        .get("input_stream")
+        .and_then(|v| v.as_array())
+        .expect("No 'input_stream' array found in JSON");
 
     let stream_chunks = data_chunks
         .iter()

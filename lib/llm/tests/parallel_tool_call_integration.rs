@@ -411,7 +411,7 @@ async fn test_deepseek_v3_1_tool_call_parsing() {
 
     // Parse the tool calls using the deepseek_v3_1 parser
     let (tool_calls, remaining_content) =
-        detect_and_parse_tool_call(&response_content, Some("deepseek_v3_1"))
+        detect_and_parse_tool_call(response_content, Some("deepseek_v3_1"))
             .await
             .expect("Should successfully parse deepseek_v3_1 tool calls");
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Helper script to send streaming requests to an LLM server.
+In the future we can extend this script to generate json for stream test data.
 
 Usage (cd lib/llm/tests/scripts/):
     python tool_call_stream_request_helper.py \
