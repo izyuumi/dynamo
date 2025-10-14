@@ -979,7 +979,7 @@ impl KvPushRouter {
     }
 
     #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (token_ids, model, stop_conditions=None, sampling_options=None, output_options=None, router_config_override=None, worker_id=None, extra_args=None))]
+    #[pyo3(signature = (token_ids, model, stop_conditions=None, sampling_options=None, output_options=None, router_config_override=None, worker_id=None, dp_rank=None, extra_args=None))]
     fn generate<'p>(
         &self,
         py: Python<'p>,
@@ -990,6 +990,7 @@ impl KvPushRouter {
         output_options: Option<PyObject>,
         router_config_override: Option<PyObject>,
         worker_id: Option<i64>,
+        dp_rank: Option<u32>,
         extra_args: Option<PyObject>,
     ) -> PyResult<Bound<'p, PyAny>> {
         // Depythonize the options with defaults
@@ -1045,6 +1046,7 @@ impl KvPushRouter {
             .sampling_options(sampling_options)
             .output_options(output_options)
             .router_config_override(router_config_override)
+            .dp_rank(dp_rank.unwrap_or(0))
             .extra_args(extra_args);
 
         // Set backend_instance_id if worker_id is provided

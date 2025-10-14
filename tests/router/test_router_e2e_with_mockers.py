@@ -298,6 +298,7 @@ async def send_request_via_python_kv_router(
     worker_id: Optional[
         int
     ] = None,  # If None, Router will select the best available worker
+    dp_rank: Optional[int] = None,  # Data parallel rank (defaults to 0)
 ):
     """Send a request to the specified mocker instance.
     Returns True if mockers respond, otherwise raises or returns False.
@@ -324,6 +325,7 @@ async def send_request_via_python_kv_router(
                 output_options=output_options,
                 router_config_override=router_config_override,
                 worker_id=worker_id,
+                dp_rank=dp_rank,
             )
 
             if stream is not None:
@@ -1317,30 +1319,32 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
     """Validate KV cache prefix reuse by sending progressive requests with overlapping prefixes.
 
     Flow:
-      - Start two mocker workers sharing a namespace.
-      - Wait for workers to be ready.
+      - Start one mocker worker with dp_size=2.
+      - Wait for worker to be ready.
       - Send 4 progressive requests, each extending the previous tokens:
         * Request 1: BLOCK_SIZE random tokens
         * Request 2: Request 1 tokens + BLOCK_SIZE new random tokens
         * Request 3: Request 2 tokens + BLOCK_SIZE new random tokens
         * Request 4: Request 3 tokens + BLOCK_SIZE new random tokens
       - Dump events from router and verify:
-        * All but one worker should have no events (one worker handles all due to prefix reuse)
-        * The worker with events should have exactly 4 events (one per request)
+        * All but one dp_rank should have no events (one dp_rank handles all due to prefix reuse)
+        * The dp_rank with events should have exactly 4 events (one per request)
     """
 
     # runtime_services starts etcd and nats
     logger.info("Starting test router prefix reuse and KV events synchronization")
 
-    # Create mocker args dictionary
-    mocker_args = {"speedup_ratio": SPEEDUP_RATIO, "block_size": BLOCK_SIZE}
+    # Create mocker args dictionary with dp_size=2
+    mocker_args = {
+        "speedup_ratio": SPEEDUP_RATIO,
+        "block_size": BLOCK_SIZE,
+        "dp_size": 2,
+    }
 
     try:
-        # Start mocker instances with the new CLI interface
-        logger.info(f"Starting {NUM_MOCKERS} mocker instances")
-        mockers = MockerProcess(
-            request, mocker_args=mocker_args, num_mockers=NUM_MOCKERS
-        )
+        # Start single mocker instance with dp_size=2
+        logger.info("Starting 1 mocker instance with dp_size=2")
+        mockers = MockerProcess(request, mocker_args=mocker_args, num_mockers=1)
         logger.info(f"All mockers using endpoint: {mockers.endpoint}")
         # Initialize mockers
         mockers.__enter__()
@@ -1363,7 +1367,9 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
         # Use async to manage the test flow
         async def test_sync():
             # Wait for workers to be ready and get their instance IDs
-            mocker_worker_ids = await wait_for_mockers_ready(endpoint, kv_push_router)
+            mocker_worker_ids = await wait_for_mockers_ready(
+                endpoint, kv_push_router, expected_num_workers=1
+            )
             logger.info(f"Workers ready: {mocker_worker_ids}")
 
             # Send 4 progressive requests with overlapping prefixes
@@ -1403,41 +1409,44 @@ def test_router_decisions(request, runtime_services, predownload_tokenizers):
         # Run the async test
         events_json = asyncio.run(test_sync())
 
-        # Parse events and count by worker
+        # Parse events and count by (worker_id, dp_rank)
         events = json.loads(events_json)
-        events_by_worker: dict[int, list[Any]] = {}
+        events_by_worker_dp: dict[tuple[int, int], list[Any]] = {}
 
         for event in events:
             worker_id = event.get("worker_id")
-            if worker_id not in events_by_worker:
-                events_by_worker[worker_id] = []
-            events_by_worker[worker_id].append(event)
+            # Extract dp_rank from the event's KvCacheEvent
+            dp_rank = event.get("event", {}).get("dp_rank", 0)
+            key = (worker_id, dp_rank)
+            if key not in events_by_worker_dp:
+                events_by_worker_dp[key] = []
+            events_by_worker_dp[key].append(event)
 
         logger.info(
-            f"Events by worker: {[(wid, len(evts)) for wid, evts in events_by_worker.items()]}"
+            f"Events by (worker_id, dp_rank): {[(key, len(evts)) for key, evts in events_by_worker_dp.items()]}"
         )
 
-        # Verify: All but one worker should have no events
+        # Verify: All but one (worker_id, dp_rank) should have no events
         workers_with_events = [
-            wid for wid, evts in events_by_worker.items() if len(evts) > 0
+            key for key, evts in events_by_worker_dp.items() if len(evts) > 0
         ]
 
         assert len(workers_with_events) == 1, (
-            f"Expected exactly 1 worker to have events (due to prefix reuse), "
-            f"but found {len(workers_with_events)} workers with events: {workers_with_events}"
+            f"Expected exactly 1 (worker_id, dp_rank) to have events (due to prefix reuse), "
+            f"but found {len(workers_with_events)} with events: {workers_with_events}"
         )
 
-        # Verify: The worker with events should have exactly 4 events
-        active_worker = workers_with_events[0]
-        num_events = len(events_by_worker[active_worker])
+        # Verify: The (worker_id, dp_rank) with events should have exactly 4 events
+        active_worker_dp = workers_with_events[0]
+        num_events = len(events_by_worker_dp[active_worker_dp])
 
         assert num_events == 4, (
-            f"Expected worker {active_worker} to have exactly 4 events, "
+            f"Expected (worker_id, dp_rank) {active_worker_dp} to have exactly 4 events, "
             f"but found {num_events} events"
         )
 
         logger.info(
-            f"Successfully verified: Worker {active_worker} handled all 4 requests with prefix reuse. "
+            f"Successfully verified: Worker {active_worker_dp[0]} dp_rank {active_worker_dp[1]} handled all 4 requests with prefix reuse. "
             f"KV events synchronized correctly."
         )
 
