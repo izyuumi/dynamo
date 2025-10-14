@@ -529,7 +529,7 @@ impl AsyncEngine<SingleIn<PreprocessedRequest>, ManyOut<Annotated<LLMEngineOutpu
                 let (instance_id, overlap_amount) = if let Some(id) = request.backend_instance_id {
                     // If instance_id is set, use it and manually add the request to track it
                     if !query_instance_id {
-                        let worker = WorkerWithDpRank::new(id, request.dp_rank);
+                        let worker = WorkerWithDpRank::new(id, request.dp_rank.unwrap_or(0));
                         self.chooser
                             .add_request(context_id.clone(), &request.token_ids, 0, worker)
                             .await;

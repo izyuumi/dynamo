@@ -1046,7 +1046,7 @@ impl KvPushRouter {
             .sampling_options(sampling_options)
             .output_options(output_options)
             .router_config_override(router_config_override)
-            .dp_rank(dp_rank.unwrap_or(0))
+            .dp_rank(dp_rank)
             .extra_args(extra_args);
 
         // Set backend_instance_id if worker_id is provided
