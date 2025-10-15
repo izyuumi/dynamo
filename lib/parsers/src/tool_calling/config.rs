@@ -155,7 +155,10 @@ impl ToolCallConfig {
                     "<｜tool▁calls▁begin｜>".to_string(),
                     "<｜tool▁call▁begin｜>".to_string(),
                 ],
-                tool_call_end_tokens: vec!["<｜tool▁calls▁end｜>".to_string()],
+                tool_call_end_tokens: vec![
+                    "<｜tool▁call▁end｜>".to_string(),
+                    "<｜tool▁calls▁end｜>".to_string(),
+                ],
                 parser_type: JsonParserType::DeepseekV31,
                 ..Default::default()
             },
