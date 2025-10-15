@@ -513,8 +513,8 @@ func (r *DynamoGraphDeploymentRequestReconciler) createDGD(ctx context.Context, 
 		return ctrl.Result{}, fmt.Errorf("generatedDeployment has neither Object nor Raw set")
 	}
 
-	// Determine DGD name and namespace (start with DGDR's metadata)
-	dgdName := dgdr.Name
+	// Determine DGD name and namespace
+	dgdName := generatedDGD.Name
 	dgdNamespace := dgdr.Namespace
 
 	if dgdr.Spec.DeploymentOverrides != nil {
