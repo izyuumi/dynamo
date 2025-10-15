@@ -239,7 +239,6 @@ mod tests {
 
     #[test]
     fn test_parse_tool_calls_deepseek_v3_1_with_multi_tool_calls_with_normal_text() {
-        // Everything is normal text in case of invalid json
         let text = r#"The following tool calls retrieve weather information: <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>get_current_weather宽带}{location": "Tokyo"}<｜tool▁call▁end｜><｜tool▁call▁begin｜>get_weather_forecast宽带}{location": "Berlin", "days": 7, "units": "imperial"}<｜tool▁call▁end｜><｜tool▁call▁begin｜>get_air_quality宽带}{location": "Berlin", "radius": 50}<｜tool▁call▁end｜><｜tool▁calls▁end｜>"#;
         let config = JsonParserConfig {
             tool_call_start_tokens: vec!["<｜tool▁calls▁begin｜>".to_string()],
@@ -249,6 +248,55 @@ mod tests {
         let (result, content) = parse_tool_calls_deepseek_v3_1(text, &config).unwrap();
         assert_eq!(content, Some(text.trim().to_string()));
         assert_eq!(result.len(), 0);
+    }
+
+    #[test]
+    fn test_parse_tool_calls_deepseek_v3_1_complex_nested_json_todo_write() {
+        let text = r#"<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>TodoWrite<｜tool▁sep｜>{"todos": [{"content": "Explore the root directory structure", "status": "in_progress", "activeForm": "Exploring the root directory structure"}, {"content": "Examine package.json and configuration files", "status": "pending", "activeForm": "Examining package.json and configuration files"}, {"content": "Analyze source code structure and key modules", "status": "pending", "activeForm": "Analyzing source code structure and key modules"}, {"content": "Identify main entry points and architectural patterns", "status": "pending", "activeForm": "Identifying main entry points and architectural patterns"}, {"content": "Summarize the codebase purpose and functionality", "status": "pending", "activeForm": "Summarizing the codebase purpose and functionality"}]}<｜tool▁call▁end｜><｜tool▁calls▁end｜>"#;
+        let config = JsonParserConfig {
+            tool_call_start_tokens: vec![
+                "<｜tool▁calls▁begin｜>".to_string(),
+                "<｜tool▁call▁begin｜>".to_string(),
+            ],
+            tool_call_end_tokens: vec![
+                "<｜tool▁call▁end｜>".to_string(),
+                "<｜tool▁calls▁end｜>".to_string(),
+            ],
+            ..Default::default()
+        };
+        let (result, content) = parse_tool_calls_deepseek_v3_1(text, &config).unwrap();
+        assert_eq!(content, Some("".to_string()));
+        assert_eq!(result.len(), 1);
+
+        let (name, args) = extract_name_and_args(result[0].clone());
+        assert_eq!(name, "TodoWrite");
+
+        let todos = &args["todos"];
+        assert!(todos.is_array());
+        let todos_array = todos.as_array().unwrap();
+        assert_eq!(todos_array.len(), 5);
+
+        assert_eq!(
+            todos_array[0]["content"],
+            "Explore the root directory structure"
+        );
+        assert_eq!(todos_array[0]["status"], "in_progress");
+        assert_eq!(
+            todos_array[0]["activeForm"],
+            "Exploring the root directory structure"
+        );
+
+        assert_eq!(
+            todos_array[1]["content"],
+            "Examine package.json and configuration files"
+        );
+        assert_eq!(todos_array[1]["status"], "pending");
+
+        assert_eq!(
+            todos_array[4]["content"],
+            "Summarize the codebase purpose and functionality"
+        );
+        assert_eq!(todos_array[4]["status"], "pending");
     }
 }
 
