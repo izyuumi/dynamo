@@ -76,6 +76,14 @@ FIELD_TEST_MARKERS_DETAIL = "s_test_markers_detail"  # JSON string of detailed m
 FIELD_TEST_DURATION = "l_test_duration_ms"  # Test duration in milliseconds
 FIELD_TEST_STATUS = "s_test_status"  # Test status (passed, failed, error, skipped)
 
+# Annotation fields
+FIELD_ANNOTATIONS_COUNT = "l_annotations_count"  # Total number of annotations
+FIELD_ANNOTATIONS_NOTICE_COUNT = "l_annotations_notice_count"  # Number of notice annotations
+FIELD_ANNOTATIONS_WARNING_COUNT = "l_annotations_warning_count"  # Number of warning annotations
+FIELD_ANNOTATIONS_FAILURE_COUNT = "l_annotations_failure_count"  # Number of failure annotations
+FIELD_ANNOTATIONS_SUMMARY = "s_annotations_summary"  # Summary of annotation messages
+FIELD_ANNOTATIONS_DETAIL = "s_annotations_detail"  # JSON string of detailed annotation data
+
 
 class BuildMetricsReader:
     """Reader for build metrics from environment variables and artifacts"""
@@ -370,151 +378,150 @@ class WorkflowMetricsUploader:
             print(self.handle_upload_error(e, f"GitHub API GET {endpoint}"))
             return None
 
-    # Temporarily disabled annotation methods
-    # def get_annotations_for_job(self, job_id: str) -> Dict[str, Any]:
-    #     """
-    #     Fetch annotations for a specific job from GitHub API
-    #     Returns a dictionary with annotation counts and details
-    #     """
-    #     annotations_data = self.get_github_api_data(
-    #         f"/repos/{self.repo}/check-runs/{job_id}/annotations"
-    #     )
-    #     
-    #     if not annotations_data:
-    #         print(f"⚠️  Could not fetch annotations for job {job_id}")
-    #         return {
-    #             "total_count": 0,
-    #             "notice_count": 0,
-    #             "warning_count": 0,
-    #             "failure_count": 0,
-    #             "summary": "",
-    #             "details": []
-    #         }
-    #     
-    #     # Process annotations
-    #     annotations = annotations_data if isinstance(annotations_data, list) else []
-    #     
-    #     notice_count = 0
-    #     warning_count = 0 
-    #     failure_count = 0
-    #     messages = []
-    #     details = []
-    #     
-    #     for annotation in annotations:
-    #         annotation_level = annotation.get("annotation_level", "").lower()
-    #         message = annotation.get("message", "")
-    #         title = annotation.get("title", "")
-    #         
-    #         # Count by level
-    #         if annotation_level == "notice":
-    #             notice_count += 1
-    #         elif annotation_level == "warning":
-    #             warning_count += 1
-    #         elif annotation_level == "failure":
-    #             failure_count += 1
-    #         
-    #         # Collect messages for summary
-    #         if message:
-    #             if title:
-    #                 messages.append(f"{title}: {message}")
-    #             else:
-    #                 messages.append(message)
-    #         
-    #         # Store detailed annotation info
-    #         details.append({
-    #             "level": annotation_level,
-    #             "message": message,
-    #             "title": title,
-    #             "path": annotation.get("path", ""),
-    #             "start_line": annotation.get("start_line"),
-    #             "end_line": annotation.get("end_line"),
-    #             "start_column": annotation.get("start_column"),
-    #             "end_column": annotation.get("end_column")
-    #         })
-    #     
-    #     total_count = len(annotations)
-    #     summary = "; ".join(messages[:5])  # Limit to first 5 messages
-    #     if len(messages) > 5:
-    #         summary += f" ... and {len(messages) - 5} more"
-    #     
-    #     print(f"📝 Found {total_count} annotations for job {job_id}: {notice_count} notices, {warning_count} warnings, {failure_count} failures")
-    #     
-    #     return {
-    #         "total_count": total_count,
-    #         "notice_count": notice_count,
-    #         "warning_count": warning_count,
-    #         "failure_count": failure_count,
-    #         "summary": summary,
-    #         "details": details
-    #     }
+    def get_annotations_for_job(self, job_id: str) -> Dict[str, Any]:
+        """
+        Fetch annotations for a specific job from GitHub API
+        Returns a dictionary with annotation counts and details
+        """
+        annotations_data = self.get_github_api_data(
+            f"/repos/{self.repo}/check-runs/{job_id}/annotations"
+        )
+        
+        if not annotations_data:
+            print(f"⚠️  Could not fetch annotations for job {job_id}")
+            return {
+                "total_count": 0,
+                "notice_count": 0,
+                "warning_count": 0,
+                "failure_count": 0,
+                "summary": "",
+                "details": []
+            }
+        
+        # Process annotations
+        annotations = annotations_data if isinstance(annotations_data, list) else []
+        
+        notice_count = 0
+        warning_count = 0 
+        failure_count = 0
+        messages = []
+        details = []
+        
+        for annotation in annotations:
+            annotation_level = annotation.get("annotation_level", "").lower()
+            message = annotation.get("message", "")
+            title = annotation.get("title", "")
+            
+            # Count by level
+            if annotation_level == "notice":
+                notice_count += 1
+            elif annotation_level == "warning":
+                warning_count += 1
+            elif annotation_level == "failure":
+                failure_count += 1
+            
+            # Collect messages for summary
+            if message:
+                if title:
+                    messages.append(f"{title}: {message}")
+                else:
+                    messages.append(message)
+            
+            # Store detailed annotation info
+            details.append({
+                "level": annotation_level,
+                "message": message,
+                "title": title,
+                "path": annotation.get("path", ""),
+                "start_line": annotation.get("start_line"),
+                "end_line": annotation.get("end_line"),
+                "start_column": annotation.get("start_column"),
+                "end_column": annotation.get("end_column")
+            })
+        
+        total_count = len(annotations)
+        summary = "; ".join(messages[:5])  # Limit to first 5 messages
+        if len(messages) > 5:
+            summary += f" ... and {len(messages) - 5} more"
+        
+        print(f"📝 Found {total_count} annotations for job {job_id}: {notice_count} notices, {warning_count} warnings, {failure_count} failures")
+        
+        return {
+            "total_count": total_count,
+            "notice_count": notice_count,
+            "warning_count": warning_count,
+            "failure_count": failure_count,
+            "summary": summary,
+            "details": details
+        }
 
-    # def get_annotations_for_workflow(self) -> Dict[str, Any]:
-    #     """
-    #     Fetch annotations for the entire workflow by aggregating all job annotations
-    #     Returns a dictionary with workflow-level annotation counts and details
-    #     """
-    #     print(f"🔍 Fetching annotations for workflow {self.run_id}")
-    #     
-    #     # Get all jobs for this workflow
-    #     jobs_data = self.get_github_api_data(
-    #         f"/repos/{self.repo}/actions/runs/{self.run_id}/jobs"
-    #     )
-    #     
-    #     if not jobs_data or "jobs" not in jobs_data:
-    #         print("⚠️  Could not fetch jobs data for workflow annotations")
-    #         return {
-    #             "total_count": 0,
-    #             "notice_count": 0,
-    #             "warning_count": 0,
-    #             "failure_count": 0,
-    #             "summary": "",
-    #             "details": []
-    #         }
-    #     
-    #     # Aggregate annotations from all jobs
-    #     total_annotations = 0
-    #     total_notices = 0
-    #     total_warnings = 0
-    #     total_failures = 0
-    #     all_messages = []
-    #     all_details = []
-    #     
-    #     for job in jobs_data.get("jobs", []):
-    #         job_id = job.get("id")
-    #         job_name = job.get("name", "unknown")
-    #         
-    #         if job_id:
-    #             job_annotations = self.get_annotations_for_job(str(job_id))
-    #             
-    #             total_annotations += job_annotations["total_count"]
-    #             total_notices += job_annotations["notice_count"]
-    #             total_warnings += job_annotations["warning_count"]
-    #             total_failures += job_annotations["failure_count"]
-    #             
-    #             if job_annotations["summary"]:
-    #                 all_messages.append(f"[{job_name}] {job_annotations['summary']}")
-    #             
-    #             # Add job context to details
-    #             for detail in job_annotations["details"]:
-    #                 detail["job_name"] = job_name
-    #                 detail["job_id"] = job_id
-    #                 all_details.append(detail)
-    #     
-    #     # Create workflow summary
-    #     workflow_summary = "; ".join(all_messages[:3])  # Limit to first 3 job summaries
-    #     if len(all_messages) > 3:
-    #         workflow_summary += f" ... and {len(all_messages) - 3} more jobs"
-    #     
-    #     print(f"📊 Workflow annotations summary: {total_annotations} total ({total_notices} notices, {total_warnings} warnings, {total_failures} failures)")
-    #     
-    #     return {
-    #         "total_count": total_annotations,
-    #         "notice_count": total_notices,
-    #         "warning_count": total_warnings,
-    #         "failure_count": total_failures,
-    #         "summary": workflow_summary,
-    #         "details": all_details
-    #     }
+    def get_annotations_for_workflow(self) -> Dict[str, Any]:
+        """
+        Fetch annotations for the entire workflow by aggregating all job annotations
+        Returns a dictionary with workflow-level annotation counts and details
+        """
+        print(f"🔍 Fetching annotations for workflow {self.run_id}")
+        
+        # Get all jobs for this workflow
+        jobs_data = self.get_github_api_data(
+            f"/repos/{self.repo}/actions/runs/{self.run_id}/jobs"
+        )
+        
+        if not jobs_data or "jobs" not in jobs_data:
+            print("⚠️  Could not fetch jobs data for workflow annotations")
+            return {
+                "total_count": 0,
+                "notice_count": 0,
+                "warning_count": 0,
+                "failure_count": 0,
+                "summary": "",
+                "details": []
+            }
+        
+        # Aggregate annotations from all jobs
+        total_annotations = 0
+        total_notices = 0
+        total_warnings = 0
+        total_failures = 0
+        all_messages = []
+        all_details = []
+        
+        for job in jobs_data.get("jobs", []):
+            job_id = job.get("id")
+            job_name = job.get("name", "unknown")
+            
+            if job_id:
+                job_annotations = self.get_annotations_for_job(str(job_id))
+                
+                total_annotations += job_annotations["total_count"]
+                total_notices += job_annotations["notice_count"]
+                total_warnings += job_annotations["warning_count"]
+                total_failures += job_annotations["failure_count"]
+                
+                if job_annotations["summary"]:
+                    all_messages.append(f"[{job_name}] {job_annotations['summary']}")
+                
+                # Add job context to details
+                for detail in job_annotations["details"]:
+                    detail["job_name"] = job_name
+                    detail["job_id"] = job_id
+                    all_details.append(detail)
+        
+        # Create workflow summary
+        workflow_summary = "; ".join(all_messages[:3])  # Limit to first 3 job summaries
+        if len(all_messages) > 3:
+            workflow_summary += f" ... and {len(all_messages) - 3} more jobs"
+        
+        print(f"📊 Workflow annotations summary: {total_annotations} total ({total_notices} notices, {total_warnings} warnings, {total_failures} failures)")
+        
+        return {
+            "total_count": total_annotations,
+            "notice_count": total_notices,
+            "warning_count": total_warnings,
+            "failure_count": total_failures,
+            "summary": workflow_summary,
+            "details": all_details
+        }
 
     def add_common_context_fields(
         self, db_data: Dict[str, Any], workflow_data: Optional[Dict[str, Any]] = None
@@ -702,25 +709,25 @@ class WorkflowMetricsUploader:
         # Common context fields
         self.add_common_context_fields(db_data, workflow_data)
 
-        # Temporarily disabled: Fetch and add annotation data for the workflow
-        # try:
-        #     workflow_annotations = self.get_annotations_for_workflow()
-        #     db_data[FIELD_ANNOTATIONS_COUNT] = workflow_annotations["total_count"]
-        #     db_data[FIELD_ANNOTATIONS_NOTICE_COUNT] = workflow_annotations["notice_count"]
-        #     db_data[FIELD_ANNOTATIONS_WARNING_COUNT] = workflow_annotations["warning_count"]
-        #     db_data[FIELD_ANNOTATIONS_FAILURE_COUNT] = workflow_annotations["failure_count"]
-        #     db_data[FIELD_ANNOTATIONS_SUMMARY] = workflow_annotations["summary"]
-        #     db_data[FIELD_ANNOTATIONS_DETAIL] = json.dumps(workflow_annotations["details"])
-        #     print(f"📝 Added workflow annotations: {workflow_annotations['total_count']} total")
-        # except Exception as e:
-        #     print(f"⚠️  Failed to fetch workflow annotations: {e}")
-        #     # Set default values if annotation fetch fails
-        #     db_data[FIELD_ANNOTATIONS_COUNT] = 0
-        #     db_data[FIELD_ANNOTATIONS_NOTICE_COUNT] = 0
-        #     db_data[FIELD_ANNOTATIONS_WARNING_COUNT] = 0
-        #     db_data[FIELD_ANNOTATIONS_FAILURE_COUNT] = 0
-        #     db_data[FIELD_ANNOTATIONS_SUMMARY] = ""
-        #     db_data[FIELD_ANNOTATIONS_DETAIL] = "[]"
+        # Fetch and add annotation data for the workflow
+        try:
+            workflow_annotations = self.get_annotations_for_workflow()
+            db_data[FIELD_ANNOTATIONS_COUNT] = workflow_annotations["total_count"]
+            db_data[FIELD_ANNOTATIONS_NOTICE_COUNT] = workflow_annotations["notice_count"]
+            db_data[FIELD_ANNOTATIONS_WARNING_COUNT] = workflow_annotations["warning_count"]
+            db_data[FIELD_ANNOTATIONS_FAILURE_COUNT] = workflow_annotations["failure_count"]
+            db_data[FIELD_ANNOTATIONS_SUMMARY] = workflow_annotations["summary"]
+            db_data[FIELD_ANNOTATIONS_DETAIL] = json.dumps(workflow_annotations["details"])
+            print(f"📝 Added workflow annotations: {workflow_annotations['total_count']} total")
+        except Exception as e:
+            print(f"⚠️  Failed to fetch workflow annotations: {e}")
+            # Set default values if annotation fetch fails
+            db_data[FIELD_ANNOTATIONS_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_NOTICE_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_WARNING_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_FAILURE_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_SUMMARY] = ""
+            db_data[FIELD_ANNOTATIONS_DETAIL] = "[]"
 
         # Post to database
         self.post_to_db(self.workflow_index, db_data)
@@ -739,7 +746,7 @@ class WorkflowMetricsUploader:
                 # FILTER: Skip excluded jobs to avoid infinite loops and other unwanted jobs
                 if job_name in EXCLUDED_JOB_NAMES:
                     print(f"⏭️  Skipping excluded job '{job_name}'")
-                continue
+                    continue
         
                 print(f"📤 Uploading job: '{job_name}'")
 
@@ -794,6 +801,27 @@ class WorkflowMetricsUploader:
         runner_id = job_data.get("runner_id")
         db_data[FIELD_RUNNER_ID] = str(runner_id) if runner_id is not None else ""
         db_data[FIELD_RUNNER_NAME] = str(job_data.get("runner_name", ""))
+        
+        # Fetch and add annotation data for this job
+        try:
+            job_annotations = self.get_annotations_for_job(str(job_id))
+            db_data[FIELD_ANNOTATIONS_COUNT] = job_annotations["total_count"]
+            db_data[FIELD_ANNOTATIONS_NOTICE_COUNT] = job_annotations["notice_count"]
+            db_data[FIELD_ANNOTATIONS_WARNING_COUNT] = job_annotations["warning_count"]
+            db_data[FIELD_ANNOTATIONS_FAILURE_COUNT] = job_annotations["failure_count"]
+            db_data[FIELD_ANNOTATIONS_SUMMARY] = job_annotations["summary"]
+            db_data[FIELD_ANNOTATIONS_DETAIL] = json.dumps(job_annotations["details"])
+            if job_annotations["total_count"] > 0:
+                print(f"📝 Found {job_annotations['total_count']} annotations for job {job_name}")
+        except Exception as e:
+            print(f"⚠️  Failed to fetch annotations for job {job_name}: {e}")
+            # Set default values if annotation fetch fails
+            db_data[FIELD_ANNOTATIONS_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_NOTICE_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_WARNING_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_FAILURE_COUNT] = 0
+            db_data[FIELD_ANNOTATIONS_SUMMARY] = ""
+            db_data[FIELD_ANNOTATIONS_DETAIL] = "[]"
         
         # Add common context fields
         self.add_common_context_fields(db_data)
