@@ -106,7 +106,7 @@ const (
 	VolumeNameProfilingOutput = "profiling-output"
 
 	// Volume paths
-	ProfilingOutputPath = "/output"
+	ProfilingOutputPath = "/data"
 	ProfilingOutputFile = "config_with_planner.yaml"
 	ProfilingConfigPath = "/config"
 	ProfilingConfigFile = "disagg.yaml"
@@ -849,6 +849,7 @@ while [ ! -f %s/%s ]; do sleep 2; done
 DGDR_UID=$(kubectl get dynamographdeploymentrequests %s -n %s -o jsonpath='{.metadata.uid}')
 DGDR_API_VERSION=$(kubectl get dynamographdeploymentrequests %s -n %s -o jsonpath='{.apiVersion}')
 
+# Start building ConfigMap YAML with DGD spec
 cat >/tmp/cm.yaml <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -866,6 +867,19 @@ data:
   %s: |
 EOF
 sed 's/^/    /' %s/%s >> /tmp/cm.yaml
+
+# Add profiling data directories to ConfigMap for long-term storage
+# Find all interpolation directories and add their raw_data.npz files
+for dir in %s/*/interpolation; do
+  if [ -d "$dir" ]; then
+    dirname=$(basename $(dirname "$dir"))
+    if [ -f "$dir/raw_data.npz" ]; then
+      echo "  ${dirname}_raw_data.npz: |" >> /tmp/cm.yaml
+      base64 "$dir/raw_data.npz" | sed 's/^/    /' >> /tmp/cm.yaml
+    fi
+  fi
+done
+
 kubectl apply -f /tmp/cm.yaml
 echo "Saved profiling output to ConfigMap %s"
 `,
@@ -876,6 +890,7 @@ echo "Saved profiling output to ConfigMap %s"
 				dgdr.Name,
 				ProfilingOutputFile,
 				ProfilingOutputPath, ProfilingOutputFile,
+				ProfilingOutputPath,
 				outputConfigMapName,
 			)},
 			VolumeMounts: []corev1.VolumeMount{{
@@ -885,11 +900,13 @@ echo "Saved profiling output to ConfigMap %s"
 			}},
 		}
 
-		// Build volumes - always include output emptyDir
+		// Build volumes - use dynamo-pvc for profiling output so data persists for the Planner
 		volumes := []corev1.Volume{{
 			Name: VolumeNameProfilingOutput,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+					ClaimName: "dynamo-pvc",
+				},
 			},
 		}}
 
