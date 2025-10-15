@@ -11,18 +11,17 @@ from dynamo.llm.trtllm_integration.rust import (
 )
 from dynamo.runtime import DistributedRuntime
 
-
 class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
-    class KVBMForwardPassCallback(KvCacheConnectorWorker.ForwardPassCallback):
 
-        def __init__(self, connector):
-            event = torch.cuda.Event(enable_timing=False, interprocess=False)
-            super().__init__(event)
-            self._connector = connector
-
-        def callback(self):
+    def _callable_object(self) -> callable:
+        assert self._connector is not None, "Expected cache connector worker to have non-None _connector obj"
+        assert self.event is not None, "Expected cache connector worker to have non-None event obj"
+        def callback():
+            self.event.record()
             self.event.synchronize()
             self._connector.execute_offload_operations()
+
+        return callback
 
     def __init__(self, llm_args: TorchLlmArgs):
         super().__init__(llm_args)
@@ -33,11 +32,14 @@ class DynamoKVBMConnectorWorker(KvCacheConnectorWorker):
         self.rank = mappings.rank
 
         self._connector = RustKvConnectorWorker(self.drt, str(self.rank))
+        self.event = torch.cuda.Event()
 
-        self.forward_pass_callback = self.KVBMForwardPassCallback(self._connector)
-
-    def register_forward_pass_callback(self) -> KVBMForwardPassCallback:
-        return self.forward_pass_callback
+    def register_forward_pass_callable(self) -> callable:
+        """
+        Register a callable object which will be called at the
+        end of the forward pass.
+        """
+        return self._callable_object()
     
     def register_kv_caches(self, kv_cache_tensor: torch.Tensor):
         """
